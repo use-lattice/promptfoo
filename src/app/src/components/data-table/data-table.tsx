@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Spinner } from '@app/components/ui/spinner';
 import { useIsPrinting } from '@app/hooks/useIsPrinting';
@@ -50,6 +51,9 @@ export function DataTable<TData, TValue = unknown>({
   rowSelection: controlledRowSelection,
   onRowSelectionChange,
   getRowId,
+  expanded: controlledExpanded,
+  onExpandedChange,
+  expandedRowClassName,
   toolbarActions,
   maxHeight,
   initialColumnVisibility = {},
@@ -63,9 +67,28 @@ export function DataTable<TData, TValue = unknown>({
   renderSubComponent,
   singleExpand = false,
   getRowCanExpand: getRowCanExpandProp,
+  manualFiltering = false,
+  columnFilters: externalColumnFilters,
+  onColumnFiltersChange: externalOnColumnFiltersChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [internalColumnFilters, setInternalColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const columnFilters =
+    manualFiltering && externalColumnFilters ? externalColumnFilters : internalColumnFilters;
+  // Use a ref to avoid stale closures when resolving updater functions
+  const columnFiltersRef = React.useRef(columnFilters);
+  columnFiltersRef.current = columnFilters;
+  const setColumnFilters = React.useCallback(
+    (updater: ColumnFiltersState | ((prev: ColumnFiltersState) => ColumnFiltersState)) => {
+      const nextValue = typeof updater === 'function' ? updater(columnFiltersRef.current) : updater;
+      if (manualFiltering && externalOnColumnFiltersChange) {
+        externalOnColumnFiltersChange(nextValue);
+      } else {
+        setInternalColumnFilters(nextValue);
+      }
+    },
+    [manualFiltering, externalOnColumnFiltersChange],
+  );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>(initialColumnVisibility);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
@@ -90,7 +113,7 @@ export function DataTable<TData, TValue = unknown>({
     }));
   }, []);
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
-  const [expanded, setExpanded] = React.useState<ExpandedState>({});
+  const [internalExpanded, setInternalExpanded] = React.useState<ExpandedState>({});
   const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -105,6 +128,8 @@ export function DataTable<TData, TValue = unknown>({
 
   // Use controlled or internal row selection state
   const rowSelection = controlledRowSelection ?? internalRowSelection;
+  const expanded = controlledExpanded ?? internalExpanded;
+
   const handleRowSelectionChange = React.useCallback(
     (updaterOrValue: RowSelectionState | ((old: RowSelectionState) => RowSelectionState)) => {
       const newValue =
@@ -116,6 +141,28 @@ export function DataTable<TData, TValue = unknown>({
       }
     },
     [onRowSelectionChange, rowSelection],
+  );
+
+  const handleExpandedChange = React.useCallback(
+    (updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState)) => {
+      const nextValue =
+        typeof updaterOrValue === 'function' ? updaterOrValue(expanded) : updaterOrValue;
+      let normalizedValue = nextValue;
+
+      if (singleExpand && typeof nextValue !== 'boolean' && typeof expanded !== 'boolean') {
+        const newKeys = Object.keys(nextValue).filter((key) => !expanded[key] && nextValue[key]);
+        if (newKeys.length > 0) {
+          normalizedValue = { [newKeys[0]]: true };
+        }
+      }
+
+      if (onExpandedChange) {
+        onExpandedChange(normalizedValue);
+      } else {
+        setInternalExpanded(normalizedValue);
+      }
+    },
+    [expanded, onExpandedChange, singleExpand],
   );
 
   // Create checkbox column for row selection (selects ALL rows, not just current page)
@@ -213,27 +260,13 @@ export function DataTable<TData, TValue = unknown>({
     enableRowSelection,
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
+    manualFiltering,
     filterFns: {
       operator: operatorFilterFn,
     },
     globalFilterFn: 'includesString',
     onRowSelectionChange: handleRowSelectionChange,
-    onExpandedChange: (updater) => {
-      setExpanded((prev) => {
-        const next = typeof updater === 'function' ? updater(prev) : updater;
-        if (!singleExpand || typeof next === 'boolean') {
-          return next;
-        }
-        // In singleExpand mode, keep only the newly expanded row
-        if (typeof prev !== 'boolean' && typeof next !== 'boolean') {
-          const newKeys = Object.keys(next).filter((k) => !prev[k] && next[k]);
-          if (newKeys.length > 0) {
-            return { [newKeys[0]]: true };
-          }
-        }
-        return next;
-      });
-    },
+    onExpandedChange: handleExpandedChange,
     getRowCanExpand: getRowCanExpandProp ?? (renderSubComponent ? () => true : undefined),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -260,6 +293,7 @@ export function DataTable<TData, TValue = unknown>({
     ...(renderSubComponent ? { getExpandedRowModel: getExpandedRowModel() } : {}),
   });
 
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
   const tableMinWidth = table.getTotalSize() ? `${table.getTotalSize()}px` : undefined;
   const totalRows = manualPagination ? (rowCount ?? 0) : table.getFilteredRowModel().rows.length;
 
@@ -401,7 +435,7 @@ export function DataTable<TData, TValue = unknown>({
                       <th
                         key={header.id}
                         className={cn(
-                          'group py-3 text-sm font-medium relative',
+                          'group py-3 text-sm font-medium relative bg-white dark:bg-zinc-900',
                           isRightAligned ? 'text-right' : 'text-left',
                           header.column.id === 'select' || header.column.id === 'expand'
                             ? 'px-3'
@@ -418,32 +452,54 @@ export function DataTable<TData, TValue = unknown>({
                         {header.isPlaceholder ? null : (
                           <div
                             className={cn(
-                              'flex items-center gap-1 min-w-0',
-                              isRightAligned && 'flex-row-reverse',
+                              'relative min-w-0 overflow-hidden',
+                              isRightAligned && 'flex flex-row-reverse',
                             )}
                           >
-                            <span className="truncate">
+                            <span className="truncate block">
                               {flexRender(header.column.columnDef.header, header.getContext())}
                             </span>
-                            {canSort && (
+                            {(canSort || canFilter) && (
                               <span
                                 className={cn(
-                                  'shrink-0 transition-opacity',
-                                  sortDirection
-                                    ? 'text-blue-700 dark:text-blue-100 opacity-100'
-                                    : 'text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100',
+                                  'absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5',
+                                  'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
+                                  'bg-inherit',
+                                  isRightAligned ? 'left-0 pr-1' : 'right-0 pl-1',
+                                  // When sort is active, always show
+                                  sortDirection && 'opacity-100 pointer-events-auto',
+                                  // When filter is active, always show
+                                  header.column.getIsFiltered() &&
+                                    'opacity-100 pointer-events-auto',
                                 )}
                               >
-                                {sortDirection === 'asc' ? (
-                                  <ArrowUp className="size-4" />
-                                ) : sortDirection === 'desc' ? (
-                                  <ArrowDown className="size-4" />
-                                ) : (
-                                  <ArrowUpDown className="size-4" />
+                                {canSort && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={cn(
+                                      'h-6 w-6 p-0',
+                                      sortDirection
+                                        ? 'text-blue-700 dark:text-blue-100'
+                                        : 'text-zinc-400 dark:text-zinc-500',
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      header.column.getToggleSortingHandler()?.(e);
+                                    }}
+                                  >
+                                    {sortDirection === 'asc' ? (
+                                      <ArrowUp className="size-4" />
+                                    ) : sortDirection === 'desc' ? (
+                                      <ArrowDown className="size-4" />
+                                    ) : (
+                                      <ArrowUpDown className="size-4" />
+                                    )}
+                                  </Button>
                                 )}
+                                {canFilter && <DataTableHeaderFilter column={header.column} />}
                               </span>
                             )}
-                            {canFilter && <DataTableHeaderFilter column={header.column} />}
                           </div>
                         )}
                         {/* Column resize handle */}
@@ -531,8 +587,16 @@ export function DataTable<TData, TValue = unknown>({
                       })}
                     </tr>
                     {renderSubComponent && row.getIsExpanded() && (
-                      <tr className="bg-zinc-100/30 dark:bg-zinc-800/30">
-                        <td colSpan={allColumns.length} className="p-4">
+                      <tr
+                        className={cn(
+                          'bg-neutral-100/30 dark:bg-neutral-800/30',
+                          expandedRowClassName,
+                        )}
+                      >
+                        <td
+                          colSpan={visibleColumnCount}
+                          className="border-b border-zinc-200 p-4 dark:border-zinc-800"
+                        >
                           {renderSubComponent(row)}
                         </td>
                       </tr>
@@ -541,7 +605,7 @@ export function DataTable<TData, TValue = unknown>({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={allColumns.length} className="h-[200px] text-center">
+                  <td colSpan={visibleColumnCount} className="h-[200px] text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Search className="size-8 text-zinc-400 dark:text-zinc-500" />
                       <p className="text-sm text-zinc-500 dark:text-zinc-400">

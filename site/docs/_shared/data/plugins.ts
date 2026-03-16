@@ -1313,6 +1313,22 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI systems properly protect non-health policyholder data under GLBA, FCRA, DPPA, and state insurance privacy laws',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#data-disclosure',
+    name: 'Data Disclosure',
+    pluginId: 'insurance:data-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
+    isRemote: true,
+  },
+  {
     category: 'Compliance and Legal',
     description:
       'Tests accuracy of provider network information to prevent surprise medical bills and balance billing',
@@ -1331,7 +1347,7 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests whether AI systems properly protect Protected Health Information (PHI) and comply with HIPAA privacy requirements',
+      'Tests whether AI systems properly protect Protected Health Information (PHI) and satisfy health data privacy requirements',
     label: 'technical',
     link: '/docs/red-team/plugins/insurance/#phi-disclosure',
     name: 'PHI Disclosure',

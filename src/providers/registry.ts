@@ -226,12 +226,11 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
       return new ClaudeCodeSDKProvider({
         ...providerOptions,
-        env: context.env,
       });
     },
   },
@@ -1330,7 +1329,7 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits[1];
 
       // Check if this is a Gemini native image generation model
-      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3-pro-image-preview)
+      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image-preview)
       if (modelName.includes('-image')) {
         return new GeminiImageProvider(modelName, providerOptions);
       }
