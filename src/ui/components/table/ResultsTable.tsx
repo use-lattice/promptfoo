@@ -10,7 +10,7 @@
  * - Pass/Fail/Error status coloring
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text } from 'ink';
 import { LIMITS, TIMING } from '../../constants';
@@ -450,24 +450,13 @@ export function ResultsTable({
   // Process data for rendering
   const processedRows = useMemo(() => processTableData(data, maxCellLength), [data, maxCellLength]);
 
-  // Handle copy operation (async to avoid blocking UI)
-  // Note: uses `data` directly since filteredRows is computed later.
-  // When filters are active, we add a comment noting results are from the full dataset.
-  const handleCopy = useCallback(async () => {
-    const content = convertTableToFormat(data, 'json');
-    const result = await copyToClipboard(content);
-
-    if (result.success) {
-      setNotification({ message: 'Results copied to clipboard', type: 'success' });
-    } else {
-      setNotification({ message: result.error || 'Failed to copy', type: 'error' });
-    }
-  }, [data]);
-
   // Track filtered row count for navigation bounds.
   // Uses state to break circular dependency: filteredRows depends on navigation.filter,
   // but useTableNavigation needs the filtered count for correct bounds.
   const [filteredRowCount, setFilteredRowCount] = useState(processedRows.length);
+
+  // Ref for handleCopy — defined after filteredRows but needed by useTableNavigation
+  const handleCopyRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
   const isInteractive = interactive && isRawModeSupported();
   const navigation = useTableNavigation({
@@ -475,7 +464,7 @@ export function ResultsTable({
     colCount: layout.columns.length,
     visibleRows: layout.visibleRowCount,
     hasIndexColumn: showIndex,
-    isActive: isInteractive && !layout.isCompact && !isExporting && !isHistoryOpen && !isHelpOpen,
+    isActive: isInteractive && !isExporting && !isHistoryOpen && !isHelpOpen,
     onExit,
     onExpand: (row, _col) => {
       if (onRowSelect && filteredRows[row]) {
@@ -483,7 +472,7 @@ export function ResultsTable({
       }
     },
     onExport: () => setIsExporting(true),
-    onCopy: handleCopy,
+    onCopy: () => handleCopyRef.current?.(),
     onHistory: onTableDataChange ? () => setIsHistoryOpen(true) : undefined,
     onHelp: () => setIsHelpOpen(true),
   });
@@ -493,6 +482,32 @@ export function ResultsTable({
     () => filterRows(processedRows, navigation.filter),
     [processedRows, navigation.filter],
   );
+
+  // Build a filtered EvaluateTable for copy/export (respects active filters)
+  const filteredData = useMemo((): typeof data => {
+    if (filteredRows.length === processedRows.length) {
+      return data; // No filter active, use original data
+    }
+    return {
+      head: data.head,
+      body: filteredRows.map((row) => data.body[row.index]),
+    };
+  }, [data, filteredRows, processedRows.length]);
+
+  // Handle copy operation (async to avoid blocking UI)
+  const handleCopy = useCallback(async () => {
+    const content = convertTableToFormat(filteredData, 'json');
+    const result = await copyToClipboard(content);
+
+    if (result.success) {
+      const filterNote =
+        filteredRows.length < processedRows.length ? ` (${filteredRows.length} filtered rows)` : '';
+      setNotification({ message: `Results copied to clipboard${filterNote}`, type: 'success' });
+    } else {
+      setNotification({ message: result.error || 'Failed to copy', type: 'error' });
+    }
+  }, [filteredData, filteredRows.length, processedRows.length]);
+  handleCopyRef.current = handleCopy;
 
   // Sync filtered row count to navigation bounds
   const { dispatch: navDispatch } = navigation;
@@ -512,6 +527,16 @@ export function ResultsTable({
     }
   }, [navigation.expandedCell, layout.columns, navDispatch]);
 
+  // Auto-close expansion when row/column becomes out-of-bounds (e.g., after filter change)
+  useEffect(() => {
+    if (navigation.expandedCell) {
+      const { row, col } = navigation.expandedCell;
+      if (!filteredRows[row] || !layout.columns[col]) {
+        navDispatch({ type: 'CLOSE_EXPAND' });
+      }
+    }
+  }, [navigation.expandedCell, filteredRows, layout.columns, navDispatch]);
+
   // Calculate visible row range based on filtered rows
   const { start: visibleStart, end: visibleEnd } = getVisibleRowRange(
     navigation.scrollOffset,
@@ -526,7 +551,7 @@ export function ResultsTable({
   if (isExporting) {
     return (
       <ExportMenu
-        data={data}
+        data={filteredData}
         onComplete={(success, message) => {
           setIsExporting(false);
           setNotification({
@@ -603,10 +628,9 @@ export function ResultsTable({
     const rowData = filteredRows[row];
     const column = layout.columns[col];
 
-    // Guard against out-of-bounds column/row indices
+    // Guard against out-of-bounds column/row indices (return null, useEffect handles cleanup)
     if (!column || !rowData) {
-      // Auto-close invalid expansion
-      navigation.dispatch({ type: 'CLOSE_EXPAND' });
+      return null;
     }
 
     // Handle var column expansion - show full content with navigation

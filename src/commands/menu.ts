@@ -27,7 +27,7 @@ function executeCommand(item: MenuItem): Promise<number> {
     list: ['list', 'evals'],
     generate: ['generate', 'dataset'],
     cache: ['cache', 'manage'],
-    config: ['config', 'get', 'email'],
+    config: ['config'],
   };
 
   const args = commandMap[item.id];

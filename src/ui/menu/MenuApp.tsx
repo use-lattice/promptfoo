@@ -107,8 +107,8 @@ const defaultMenuItems: MenuItem[] = [
   },
   {
     id: 'teams',
-    label: 'Switch Team',
-    description: 'Change your current team',
+    label: 'List Teams',
+    description: 'Show available teams',
     category: 'auth',
     requiresAuth: true,
   },
@@ -123,8 +123,8 @@ const defaultMenuItems: MenuItem[] = [
   },
   {
     id: 'list',
-    label: 'List Resources',
-    description: 'Browse evals, prompts, and datasets',
+    label: 'List Evals',
+    description: 'Browse recent evaluations',
     category: 'tools',
   },
   {
@@ -144,7 +144,7 @@ const defaultMenuItems: MenuItem[] = [
   {
     id: 'config',
     label: 'Configuration',
-    description: 'View and edit settings',
+    description: 'Show config commands (get/set/unset)',
     category: 'settings',
   },
 ];
