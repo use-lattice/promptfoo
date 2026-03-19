@@ -36,8 +36,8 @@ Build a local, eval-focused voice simulation harness in promptfoo that is inspir
 ### Phase 4: Validation
 
 - [x] Add unit tests for local simulation and realtime artifact normalization.
-- [ ] Add example configs for OpenAI realtime voice evals.
-- [ ] Run lint, format, targeted tests, and at least one end-to-end eval using a local API key source.
+- [x] Add example configs for OpenAI realtime voice evals.
+- [x] Run lint, format, targeted tests, and at least one end-to-end eval using a local API key source.
 
 ## Implementation Notes
 
@@ -64,3 +64,13 @@ Build a local, eval-focused voice simulation harness in promptfoo that is inspir
 - Removed per-run mutation of shared realtime provider instructions by passing target instructions through per-call prompt context instead.
 - Extended realtime voice metadata to carry session IDs, input/output transcripts, tool-call details, event counts, and voice-turn latency breakdowns.
 - Added and passed targeted tests for the new OpenAI speech provider and Tau voice harness.
+- Added audio-buffer clearing and current tool-shape normalization in the realtime provider so synthesized half-duplex turns work reliably with OpenAI's current realtime API.
+- Added `initialMessages` support to `promptfoo:tau-voice` so voice evals can seed conversation state before the first simulated user turn.
+- Tightened the shared Tau simulator prompt to reduce role drift and assistant-message echoing in local simulated-user loops.
+- Added site docs for Tau Voice, updated the OpenAI and simulated-user provider docs, and documented voice-specific assertion guidance around ASR-sensitive identifiers.
+- Added a complete `examples/openai-realtime-tau-voice/` example with local simulator, OpenAI TTS, OpenAI realtime target, trajectory assertions, and tracing.
+- Ran focused Vitest coverage for realtime, speech, tau voice, simulated user, and shared Tau prompt helpers.
+- Ran `npm run tsc -- --pretty false` successfully after the provider and example changes.
+- Ran Biome checks on the touched provider, test, docs, and example files.
+- Ran `SKIP_OG_GENERATION=true npm run build` in `site/` successfully after the provider doc updates.
+- Ran a live end-to-end eval with `npm run local -- eval -c examples/openai-realtime-tau-voice/promptfooconfig.yaml --env-file ~/code/promptfoo/.env --no-cache --max-concurrency 1 -o /tmp/openai-realtime-tau-voice.json`, and the example passed against real OpenAI APIs.

@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: OpenAI realtime Tau-style voice eval
+
+prompts:
+  - |
+    You are an airline booking assistant speaking over voice. The current time is 2024-05-15 15:00:00 EST.
+
+    Rules:
+    - Your first tool call must be `get_user_profile` with the traveler's user ID.
+    - If the traveler has not provided a user ID yet, ask for it before anything else.
+    - Use `search_flights` only after `get_user_profile` succeeds.
+    - Prefer direct morning options when they match the request.
+    - Use the membership tier and bag benefits from the profile when explaining baggage cost implications.
+    - Do not recommend flights, quote baggage costs, or mention payment options until both `get_user_profile` and `search_flights` have completed.
+    - Do not estimate baggage costs from memory. Use the profile and returned flight baggage rules.
+    - Keep spoken replies concise and natural.
+    - Do not invent profile or flight details.
+
+providers:
+  - id: openai:realtime:gpt-realtime
+    config:
+      modalities: ['text', 'audio']
+      voice: cedar
+      maintainContext: true
+      turn_detection: null
+      input_audio_format: pcm16
+      output_audio_format: pcm16
+      tools:
+        - file://functions/get_user_profile.json
+        - file://functions/search_flights.json
+      tool_choice: auto
+      functionToolCallbacks:
+        get_user_profile: file://callbacks/airline-functions.js:getUserProfile
+        search_flights: file://callbacks/airline-functions.js:searchFlights
+
+defaultTest:
+  provider:
+    id: promptfoo:tau-voice
+    config:
+      maxTurns: 6
+      initialMessages:
+        - role: assistant
+          content: Hello, thank you for calling Promptfoo Air. Please share your traveler ID and what trip you need help with today.
+      userProvider:
+        id: openai:chat:gpt-4.1-mini
+        config:
+          temperature: 0.2
+          max_tokens: 250
+      ttsProvider:
+        id: openai:speech:gpt-4o-mini-tts
+        config:
+          voice: alloy
+          format: pcm
+
+tests:
+  - description: Cheapest direct morning Seattle option
+    vars:
+      instructions: >-
+        You are Mia Li. Open the conversation by giving your traveler ID
+        `mia_li_3668` and saying you want the cheapest direct morning flight
+        from New York to Seattle on May 20, one way, in economy. You do not
+        want insurance. You have 3 checked bags. Only give additional
+        information when the agent asks for it. Once the agent finds the best
+        matching option and explains the baggage cost implications, thank them
+        and end the conversation.
+    assert:
+      - type: llm-rubric
+        provider: openai:chat:gpt-4.1-mini
+        value: |
+          Did the voice assistant handle the travel request well?
+          Pass if: The assistant loaded the traveler profile, searched flights, recommended a direct morning economy option when available, and explained the baggage cost implications for 3 checked bags using the profile benefits and flight baggage rules.
+          Fail if: It skipped the profile or flight search, recommended a clearly wrong itinerary, or ignored the baggage cost implications.
+      - type: trajectory:tool-used
+        value: get_user_profile
+      - type: trajectory:tool-used
+        value: search_flights
+      - type: trajectory:tool-args-match
+        value:
+          name: search_flights
+          args:
+            trip_type: one_way
+            passengers: 1
+      - type: trajectory:tool-sequence
+        value:
+          steps:
+            - get_user_profile
+            - search_flights
+
+tracing:
+  enabled: true
