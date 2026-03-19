@@ -264,6 +264,41 @@ describe('SimulatedUser', () => {
       expect(mutatingProvider.callApi).toHaveBeenCalledTimes(2);
     });
 
+    it('should use a configured local user provider when available', async () => {
+      const localUserProvider: ApiProvider = {
+        id: () => 'openai:gpt-4.1-mini',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'local user response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+
+      const localSimulatedUser = new SimulatedUser({
+        id: 'local-agent',
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          _resolvedUserProvider: localUserProvider,
+        },
+      });
+
+      const result = await localSimulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'book the cheapest flight you can find' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toContain('User: local user response');
+      expect(localUserProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(localUserProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Instruction: test instructions'),
+        expect.objectContaining({
+          originalProvider: undefined,
+        }),
+      );
+      expect(mockUserProviderCallApi).not.toHaveBeenCalled();
+    });
+
     it('should handle provider delay', async () => {
       const providerWithDelay = {
         ...originalProvider,

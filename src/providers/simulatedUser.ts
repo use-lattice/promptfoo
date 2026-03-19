@@ -2,10 +2,12 @@ import logger from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
+import { buildTauUserMessages, formatTauConversation, type TauMessage } from './tauShared';
 
 import type {
   ApiProvider,
@@ -16,14 +18,11 @@ import type {
   TokenUsage,
 } from '../types/index';
 
-export type Message = {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-};
+export type Message = TauMessage;
 
 type AgentProviderOptions = ProviderOptions & {
   config?: {
-    userProvider?: ProviderOptions;
+    userProvider?: string | ProviderOptions | ApiProvider;
     instructions?: string;
     maxTurns?: number;
     stateful?: boolean;
@@ -33,6 +32,7 @@ type AgentProviderOptions = ProviderOptions & {
      * Useful for testing specific conversation states or reproducing bugs.
      */
     initialMessages?: Message[] | string;
+    _resolvedUserProvider?: ApiProvider;
   };
 };
 
@@ -46,6 +46,7 @@ export class SimulatedUser implements ApiProvider {
   private readonly rawInstructions: string;
   private readonly stateful: boolean;
   private readonly configInitialMessages?: Message[] | string;
+  private readonly resolvedUserProvider?: ApiProvider;
 
   /**
    * Because the SimulatedUser is inherited by the RedteamMischievousUserProvider, and different
@@ -59,6 +60,7 @@ export class SimulatedUser implements ApiProvider {
     this.rawInstructions = config.instructions || '{{instructions}}';
     this.stateful = config.stateful ?? false;
     this.configInitialMessages = config.initialMessages;
+    this.resolvedUserProvider = config._resolvedUserProvider;
   }
 
   id() {
@@ -176,7 +178,7 @@ export class SimulatedUser implements ApiProvider {
     return [];
   }
 
-  private async sendMessageToUser(
+  private async sendMessageToRemoteUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
   ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
@@ -204,6 +206,61 @@ export class SimulatedUser implements ApiProvider {
       messages: [...messages, { role: 'user', content: String(response.output || '') }],
       tokenUsage: response.tokenUsage,
     };
+  }
+
+  private async sendMessageToLocalUser(
+    messages: Message[],
+    userProvider: ApiProvider,
+    instructions: string,
+    context?: CallApiContextParams,
+  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
+    logger.debug('[SimulatedUser] Sending message to local simulated user provider');
+
+    const localContext = context
+      ? {
+          ...context,
+          originalProvider: undefined,
+        }
+      : undefined;
+
+    const response = await userProvider.callApi(
+      JSON.stringify(buildTauUserMessages(instructions, messages)),
+      localContext,
+    );
+
+    if (response.error) {
+      return {
+        messages,
+        error: response.error,
+      };
+    }
+
+    const output =
+      typeof response.output === 'string' ? response.output : safeJsonStringify(response.output);
+
+    logger.debug(`User: ${output}`);
+    return {
+      messages: [...messages, { role: 'user', content: output || '' }],
+      tokenUsage: response.tokenUsage,
+    };
+  }
+
+  private async sendMessageToUser(
+    messages: Message[],
+    instructions: string,
+    context?: CallApiContextParams,
+  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
+    if (this.resolvedUserProvider) {
+      return this.sendMessageToLocalUser(
+        messages,
+        this.resolvedUserProvider,
+        instructions,
+        context,
+      );
+    }
+
+    const remoteUserProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
+    return this.sendMessageToRemoteUser(messages, remoteUserProvider);
   }
 
   private async sendMessageToAgent(
@@ -261,8 +318,6 @@ export class SimulatedUser implements ApiProvider {
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
-    const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
-
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
 
     // Support initial messages from either vars.initialMessages (per-test) or config.initialMessages (provider-level)
@@ -314,7 +369,7 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
-      const userResult = await this.sendMessageToUser(messages, userProvider);
+      const userResult = await this.sendMessageToUser(messages, instructions, context);
 
       // Check for errors from remote generation disable
       if (userResult.error) {
@@ -373,11 +428,7 @@ export class SimulatedUser implements ApiProvider {
     sessionId?: string,
   ) {
     return {
-      output: messages
-        .map(
-          (message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`,
-        )
-        .join('\n---\n'),
+      output: formatTauConversation(messages),
       tokenUsage,
       metadata: {
         messages,
