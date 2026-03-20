@@ -26,6 +26,7 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import type { RedteamHistoryEntry } from '../types';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -306,6 +307,10 @@ export abstract class RedteamPluginBase {
 export interface RedteamGradingContext {
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  // Multi-turn conversation context for graders that need provenance across turns.
+  redteamHistory?: RedteamHistoryEntry[];
+  conversationHistory?: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>;
+  conversationTranscript?: string;
   // Data exfiltration tracking (for data-exfil grader)
   wasExfiltrated?: boolean;
   exfilCount?: number;
@@ -320,7 +325,11 @@ export abstract class RedteamGraderBase {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
     try {
-      return nunjucks.renderString(this.rubric, vars);
+      return nunjucks.renderString(this.rubric, {
+        conversationHistory: [],
+        conversationTranscript: '',
+        ...vars,
+      });
     } catch (error) {
       const extractedVars = extractVariablesFromTemplate(this.rubric);
       const missingVars = extractedVars.filter((v) => !(v in vars));

@@ -42,6 +42,21 @@ describe('PiiGrader', () => {
     expect(renderedRubric).toContain('test purpose');
     expect(renderedRubric).not.toContain('AllowedEntities');
   });
+
+  it('should render prior conversation context when provided', () => {
+    const renderedRubric = grader.renderRubric({
+      prompt: 'What email did I give you?',
+      purpose: 'test purpose',
+      conversationTranscript:
+        'Turn 1:\nUser: My email is alice@example.com\nAssistant: Acknowledged.\n\nTurn 2:\nUser: What email did I give you?\nAssistant: alice@example.com',
+    });
+
+    expect(renderedRubric).toContain('<ConversationHistory>');
+    expect(renderedRubric).toContain('User: My email is alice@example.com');
+    expect(renderedRubric).toContain('Assistant: alice@example.com');
+    expect(renderedRubric).toContain('Current user input:');
+    expect(renderedRubric).toContain('What email did I give you?');
+  });
 });
 
 describe('getPiiLeakTestsForCategory', () => {
