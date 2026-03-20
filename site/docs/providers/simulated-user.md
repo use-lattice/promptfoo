@@ -7,7 +7,7 @@ description: 'Simulate realistic user interactions and behaviors for comprehensi
 
 The Simulated User Provider enables testing of multi-turn conversations between an AI agent and a simulated user. This is particularly useful for testing chatbots, virtual assistants, and other conversational AI applications in realistic scenarios.
 
-It works with both simple text-based agents and advanced function-calling agents, making it ideal for testing modern AI systems that use structured APIs. You can use Promptfoo's hosted simulator or plug in a local nested `userProvider` to keep the simulation fully in-process.
+It works with both simple text-based agents and advanced function-calling agents, making it ideal for testing modern AI systems that use structured APIs. By default, regular Simulated User runs locally with OpenAI; set `userProvider` to choose a different local simulator model.
 
 It is inspired by [Tau-bench](https://github.com/sierra-research/tau-bench), a benchmark for evaluating tool-assisted agents.
 
@@ -56,16 +56,16 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type                | Description                                                                                                                    |
-| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
-| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
-| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
-| `userProvider`    | string or object    | Optional. Local provider used to generate simulated user turns in-process. If omitted, Promptfoo uses the hosted simulator.    |
+| Option            | Type                | Description                                                                                                                                     |
+| ----------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                     |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                                           |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats).                  |
+| `userProvider`    | string or object    | Optional. Local provider used to generate simulated user turns in-process. If omitted, Promptfoo uses the default local OpenAI simulator model. |
 
 ## Local in-process simulated user
 
-Set `userProvider` when you want the simulated user to run locally instead of using Promptfoo's hosted generation service:
+Set `userProvider` when you want to override the default local simulator model:
 
 ```yaml
 defaultTest:
@@ -80,6 +80,8 @@ defaultTest:
 ```
 
 This is useful when you want reproducible local evals, tighter control over the simulator model, or when you're composing a larger local harness such as the [Tau Voice provider](/docs/providers/tau-voice/).
+
+If you omit `userProvider`, Promptfoo uses its default local OpenAI chat model for regular simulated-user evals. If no OpenAI API key is available, configure `userProvider` explicitly with another local provider.
 
 ## Initial Messages
 
@@ -295,11 +297,11 @@ The conversation will automatically stop when:
 
 The `###STOP###` marker is useful for agents that can determine when a conversation has reached a natural conclusion (e.g., task completed, user satisfied).
 
-## Remote Generation
+## Local-First Default
 
-By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely.
+By default, regular `promptfoo:simulated-user` runs the simulated user locally. Your target model and the simulated user both run from your local provider configuration path.
 
-To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`. See the [Privacy Notice](/privacy/) for details on what data is sent.
+Set `userProvider` to pick a different local model or provider. See the [Privacy Notice](/privacy/) for details on features that still use hosted generation.
 
 ## Limitations
 

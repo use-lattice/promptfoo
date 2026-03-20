@@ -94,3 +94,20 @@ Build a local, eval-focused voice simulation harness in promptfoo that is inspir
 - Added Tau Voice negative coverage for malformed and invalid `initialMessages`, plus a realtime regression test for the missing-audio-bytes case.
 - Re-ran focused Vitest coverage, typecheck, Biome, and a live end-to-end voice eval after the audit pass.
 - Synced OpenAI model allowlists and pricing coverage with current docs/SDK aliases for realtime, audio, TTS, and mini-transcribe snapshots, and preserved audio `duration` through the unified audio wrapper so Tau Voice metadata keeps that artifact.
+
+### Local-First Regular Simulated User
+
+- [x] Keep the regular simulated-user control flow and output shape unchanged by injecting the default user model in the registry, not by rewriting the orchestration loop.
+- [x] Leave `promptfoo:redteam:mischievous-user` untouched; its inherited hosted fallback remains out of scope for this cutover.
+- [x] Default plain `promptfoo:simulated-user` to a local OpenAI chat provider when `userProvider` is omitted.
+- [x] Source the default model id from `src/providers/openai/defaults.ts` so the registry does not duplicate OpenAI model choices.
+- [x] Update docs to explain that normal simulated-user is local-first now, with `userProvider` still available for explicit model control.
+- [x] Verify with focused unit tests and a live eval that plain `promptfoo:simulated-user` no longer depends on Promptfoo's hosted simulator in the normal registry-loaded path.
+
+#### Validation Notes
+
+- Focused Vitest: `test/providers/registry.test.ts` and `test/providers/simulatedUser.test.ts` passed.
+- Typecheck: `npm run tsc -- --pretty false` passed.
+- Docs build: `cd site && SKIP_OG_GENERATION=true npm run build` passed.
+- Live eval with `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` and plain `promptfoo:simulated-user` passed on the first integration-tau test, proving the normal registry-loaded path stayed local.
+- A no-key smoke with an `echo` target failed in `SimulatedUser.sendMessageToLocalUser` with the local OpenAI API key error, which confirms the omitted-`userProvider` path no longer falls back to the hosted simulator.
