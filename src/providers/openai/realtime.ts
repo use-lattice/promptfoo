@@ -79,6 +79,13 @@ interface RealtimeResponse {
   functionCallResults?: string[];
 }
 
+type PendingRealtimeFunctionCall = { id: string; name: string; arguments: string };
+
+type ResolvedRealtimeFunctionCall = PendingRealtimeFunctionCall & {
+  output?: string;
+  error?: string;
+};
+
 interface ParsedRealtimePrompt {
   inputMode: 'text' | 'audio';
   promptText: string;
@@ -131,15 +138,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // Add persistent connection handling
   persistentConnection: WebSocket | null = null;
   previousItemId: string | null = null;
-  assistantMessageIds: string[] = []; // Track assistant message IDs
-  private activeTimeouts: Set<NodeJS.Timeout> = new Set();
 
   // Add audio state management
-  private lastAudioItemId: string | null = null;
   private currentAudioBuffer: Buffer[] = [];
   private currentAudioFormat: string = 'wav';
-  private isProcessingAudio: boolean = false;
-  private audioTimeout: NodeJS.Timeout | null = null;
   private functionCallbackHandler = new FunctionCallbackHandler();
   private activeConversationId: string | null = null;
   private activeSessionId: string | null = null;
@@ -189,14 +191,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   // Add method to reset audio state
   private resetAudioState(): void {
-    this.lastAudioItemId = null;
     this.currentAudioBuffer = [];
     this.currentAudioFormat = this.config.output_audio_format || 'pcm16';
-    this.isProcessingAudio = false;
-    if (this.audioTimeout) {
-      clearTimeout(this.audioTimeout);
-      this.audioTimeout = null;
-    }
   }
 
   private parsePromptInput(prompt: string): ParsedRealtimePrompt {
@@ -396,7 +392,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   private async executeFunctionCall(
-    call: { id: string; name: string; arguments: string },
+    call: PendingRealtimeFunctionCall,
     context?: CallApiContextParams,
   ): Promise<string> {
     const tracer = getGenAITracer();
@@ -439,6 +435,66 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         span.end();
       }
     });
+  }
+
+  private extractFallbackResponseText(message: WebSocketMessage): string | undefined {
+    if (!message.response || !Array.isArray(message.response.content)) {
+      return undefined;
+    }
+
+    const textContent = message.response.content.find(
+      (item: any) => item.type === 'text' && item.text && item.text.length > 0,
+    );
+    return textContent?.text;
+  }
+
+  private buildRealtimeResponse(params: {
+    responseText: string;
+    usage: any;
+    responseId: string;
+    messageId: string;
+    sessionId?: string;
+    inputTranscript?: string;
+    eventCounts?: Record<string, number>;
+    functionCalls?: ResolvedRealtimeFunctionCall[];
+    functionCallOccurred: boolean;
+    functionCallResults: string[];
+    audioData?: string | null;
+    audioFormat?: string;
+  }): RealtimeResponse {
+    const usageBreakdown = extractOpenAIUsageBreakdown(params.usage);
+
+    return {
+      output: params.responseText,
+      cost: calculateOpenAICostFromUsage(this.modelName, this.config, params.usage),
+      tokenUsage: buildRealtimeTokenUsage(params.usage),
+      cached: false,
+      metadata: {
+        responseId: params.responseId,
+        messageId: params.messageId,
+        ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+        usage: params.usage,
+        ...(usageBreakdown ? { usageBreakdown } : {}),
+        ...(params.inputTranscript ? { inputTranscript: params.inputTranscript } : {}),
+        outputTranscript: params.responseText,
+        ...(params.eventCounts ? { eventCounts: params.eventCounts } : {}),
+        ...(params.functionCalls ? { functionCalls: params.functionCalls } : {}),
+        ...(params.audioData
+          ? {
+              audio: {
+                data: params.audioData,
+                format: params.audioFormat || 'wav',
+                transcript: params.responseText,
+                sampleRate: 24000,
+                channels: 1,
+              },
+            }
+          : {}),
+      },
+      functionCallOccurred: params.functionCallOccurred,
+      functionCallResults:
+        params.functionCallResults.length > 0 ? params.functionCallResults : undefined,
+    };
   }
 
   async getRealtimeSessionBody(runtimeInstructions?: string) {
@@ -537,7 +593,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // Track message IDs and function call state
       let messageId = '';
       let responseId = '';
-      let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
+      let pendingFunctionCalls: PendingRealtimeFunctionCall[] = [];
       let functionCallOccurred = false;
       const functionCallResults: string[] = [];
 
@@ -1223,16 +1279,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let messageId = '';
       let responseId = '';
       let sessionId = this.activeSessionId || undefined;
-      let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
+      let pendingFunctionCalls: PendingRealtimeFunctionCall[] = [];
       let functionCallOccurred = false;
       const functionCallResults: string[] = [];
-      const resolvedFunctionCalls: Array<{
-        id: string;
-        name: string;
-        arguments: string;
-        output?: string;
-        error?: string;
-      }> = [];
+      const resolvedFunctionCalls: ResolvedRealtimeFunctionCall[] = [];
       const eventCounts: Record<string, number> = {};
 
       const sendEvent = (event: any) => {
@@ -1406,17 +1456,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               clearTimeout(timeout);
 
               if (responseText.length === 0) {
-                if (
-                  message.response &&
-                  message.response.content &&
-                  Array.isArray(message.response.content)
-                ) {
-                  const textContent = message.response.content.find(
-                    (item: any) => item.type === 'text' && item.text && item.text.length > 0,
-                  );
-                  if (textContent) {
-                    responseText = textContent.text;
-                  }
+                const fallbackText = this.extractFallbackResponseText(message);
+                if (fallbackText) {
+                  responseText = fallbackText;
                 }
 
                 if (responseText.length === 0) {
@@ -1445,37 +1487,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   hasAudioContent = false;
                 }
               }
-              const usageBreakdown = extractOpenAIUsageBreakdown(usage);
-
-              resolve({
-                output: responseText,
-                cost: calculateOpenAICostFromUsage(this.modelName, this.config, usage),
-                tokenUsage: buildRealtimeTokenUsage(usage),
-                cached: false,
-                metadata: {
+              resolve(
+                this.buildRealtimeResponse({
+                  responseText,
+                  usage,
                   responseId,
                   messageId,
                   sessionId,
-                  usage,
-                  ...(usageBreakdown ? { usageBreakdown } : {}),
                   inputTranscript: input.inputTranscript,
-                  outputTranscript: responseText,
                   eventCounts,
                   functionCalls: resolvedFunctionCalls,
-                  ...(hasAudioContent && {
-                    audio: {
-                      data: finalAudioData,
-                      format: audioFormat,
-                      transcript: responseText,
-                      sampleRate: 24000,
-                      channels: 1,
-                    },
-                  }),
-                },
-                functionCallOccurred,
-                functionCallResults:
-                  functionCallResults.length > 0 ? functionCallResults : undefined,
-              });
+                  functionCallOccurred,
+                  functionCallResults,
+                  audioData: finalAudioData,
+                  audioFormat,
+                }),
+              );
               break;
 
             case 'error':
@@ -1607,16 +1634,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     let messageId = '';
     let responseId = '';
     let sessionId = this.activeSessionId || undefined;
-    let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
+    let pendingFunctionCalls: PendingRealtimeFunctionCall[] = [];
     let functionCallOccurred = false;
     const functionCallResults: string[] = [];
-    const resolvedFunctionCalls: Array<{
-      id: string;
-      name: string;
-      arguments: string;
-      output?: string;
-      error?: string;
-    }> = [];
+    const resolvedFunctionCalls: ResolvedRealtimeFunctionCall[] = [];
     const eventCounts: Record<string, number> = {};
 
     const sendEvent = (event: any) => {
@@ -1655,7 +1676,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       if (clearPersistentConnection) {
         this.persistentConnection = null;
         this.previousItemId = null;
-        this.assistantMessageIds = [];
         this.activeConversationId = null;
         this.activeSessionId = null;
       }
@@ -1697,38 +1717,25 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       const hadAudio = Boolean(convertedAudio.data);
       const finalAudioData = convertedAudio.data || null;
       const finalAudioFormat = convertedAudio.format || this.currentAudioFormat;
-      const usageBreakdown = extractOpenAIUsageBreakdown(usage);
 
       this.resetAudioState();
 
-      resolve({
-        output: responseText,
-        cost: calculateOpenAICostFromUsage(this.modelName, this.config, usage),
-        tokenUsage: buildRealtimeTokenUsage(usage),
-        cached: false,
-        metadata: {
+      resolve(
+        this.buildRealtimeResponse({
+          responseText,
+          usage,
           responseId,
           messageId,
           sessionId,
-          usage,
-          ...(usageBreakdown ? { usageBreakdown } : {}),
           inputTranscript: input.inputTranscript,
-          outputTranscript: responseText,
           eventCounts,
           functionCalls: resolvedFunctionCalls,
-          ...(hadAudio && {
-            audio: {
-              data: finalAudioData,
-              format: finalAudioFormat,
-              transcript: responseText,
-              sampleRate: 24000,
-              channels: 1,
-            },
-          }),
-        },
-        functionCallOccurred,
-        functionCallResults: functionCallResults.length > 0 ? functionCallResults : undefined,
-      });
+          functionCallOccurred,
+          functionCallResults,
+          audioData: hadAudio ? finalAudioData : undefined,
+          audioFormat: finalAudioFormat,
+        }),
+      );
     };
 
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: persistent realtime event handling needs explicit protocol cases
@@ -1756,7 +1763,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               messageId = message.item.id;
               sendEvent(await this.buildResponseCreateEvent(runtimeInstructions));
             } else if (message.item.role === 'assistant') {
-              this.assistantMessageIds.push(message.item.id);
               this.previousItemId = message.item.id;
             }
             break;
@@ -1792,15 +1798,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           case 'response.audio.delta':
           case 'response.output_audio.delta': {
             const audioData = message.audio || message.delta;
-            if (message.item_id) {
-              this.lastAudioItemId = message.item_id;
-            }
 
             if (audioData && audioData.length > 0) {
               try {
                 const audioBuffer = Buffer.from(audioData, 'base64');
                 this.currentAudioBuffer.push(audioBuffer);
-                this.isProcessingAudio = true;
               } catch (error) {
                 logger.error(`Error processing audio data: ${error}`);
               }
@@ -1813,7 +1815,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             if (message.format) {
               this.currentAudioFormat = message.format;
             }
-            this.isProcessingAudio = false;
             break;
 
           case 'response.output_item.added':
@@ -1881,17 +1882,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             }
 
             if (responseText.length === 0) {
-              if (
-                message.response &&
-                message.response.content &&
-                Array.isArray(message.response.content)
-              ) {
-                const textContent = message.response.content.find(
-                  (item: any) => item.type === 'text' && item.text && item.text.length > 0,
-                );
-                if (textContent) {
-                  responseText = textContent.text;
-                }
+              const fallbackText = this.extractFallbackResponseText(message);
+              if (fallbackText) {
+                responseText = fallbackText;
               }
 
               if (responseText.length === 0) {
@@ -1947,9 +1940,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   cleanup(): void {
     if (this.persistentConnection) {
       logger.info('Cleaning up persistent WebSocket connection');
-      // Clear all timeouts
-      this.activeTimeouts.forEach((t) => clearTimeout(t));
-      this.activeTimeouts.clear();
 
       // Reset audio state
       this.resetAudioState();
@@ -1960,7 +1950,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     this.previousItemId = null;
-    this.assistantMessageIds = [];
     this.activeConversationId = null;
     this.activeSessionId = null;
   }

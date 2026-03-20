@@ -84,3 +84,12 @@ Build a local, eval-focused voice simulation harness in promptfoo that is inspir
 - Re-ran `npm run tsc -- --pretty false`, Biome checks, and the docs site build successfully after the hardening changes.
 - Re-ran the live end-to-end eval with `npm run local -- eval -c examples/openai-realtime-tau-voice/promptfooconfig.yaml --env-file ~/code/promptfoo/.env --no-cache --max-concurrency 1 -o /tmp/openai-realtime-tau-voice-qa.json`, confirmed the hardened example passed, and inspected the saved WAV plus retranscription artifacts.
 - Verified the missing-key failure path still exits fast with `Missing OPENAI_API_KEY (openai:realtime:gpt-realtime)`.
+
+### 2026-03-20
+
+- Consolidated Tau initial-message parsing, templating, and validation in `src/providers/tauShared.ts` so `promptfoo:simulated-user` and `promptfoo:tau-voice` share one seeded-history path.
+- Added a registry guard that rejects nested orchestration providers such as `promptfoo:simulated-user` or `promptfoo:tau-voice` inside nested provider slots, preventing recursive or semantically invalid configs.
+- Simplified `src/providers/openai/realtime.ts` by removing dead persistent-connection state and centralizing final realtime response assembly and fallback-text extraction.
+- Fixed direct realtime finalization to omit audio metadata when usage reports audio tokens but no audio bytes were received, instead of emitting a null-data audio payload.
+- Added Tau Voice negative coverage for malformed and invalid `initialMessages`, plus a realtime regression test for the missing-audio-bytes case.
+- Re-ran focused Vitest coverage, typecheck, Biome, and a live end-to-end voice eval after the audit pass.

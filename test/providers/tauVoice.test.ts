@@ -339,6 +339,45 @@ describe('TauVoiceProvider', () => {
     expect(result.output).not.toContain('Config greeting should be overridden.');
   });
 
+  it('should ignore malformed or invalid initialMessages instead of crashing', async () => {
+    const provider = new TauVoiceProvider({
+      config: {
+        maxTurns: 2,
+        initialMessages: '[{"role":"assistant","content":"unterminated"',
+        _resolvedUserProvider: userProvider,
+        _resolvedTtsProvider: ttsProvider,
+      },
+    });
+
+    const result = await provider.callApi('ignored', {
+      originalProvider,
+      vars: {
+        instructions: 'Continue normally after bad seeded history.',
+        initialMessages: [
+          { role: 'admin', content: 'This role is invalid and should be skipped.' },
+          { role: 'assistant', content: 123 },
+        ] as any,
+      },
+      prompt: {
+        raw: 'You are a voice airline assistant.',
+        display: 'You are a voice airline assistant.',
+        label: 'agent',
+      },
+      test: {
+        metadata: {},
+      },
+    });
+
+    const seededMessages = JSON.parse(vi.mocked(userProvider.callApi).mock.calls[0][0] as string);
+    expect(seededMessages).toEqual([
+      expect.objectContaining({
+        role: 'system',
+      }),
+    ]);
+    expect(result.output).not.toContain('This role is invalid and should be skipped.');
+    expect(result.output).toContain('User: I need a direct flight to Seattle.');
+  });
+
   it('should capture transcription verification and aggregate cost breakdowns', async () => {
     const transcriptionProvider: ApiProvider = {
       id: () => 'openai:transcription:gpt-4o-transcribe-diarize',

@@ -388,9 +388,6 @@ describe('OpenAI Realtime Provider', () => {
 
         // Manually set the previousItemId since the mock doesn't properly handle this
         provider.previousItemId = assistantId;
-        if (!provider.assistantMessageIds.includes(assistantId)) {
-          provider.assistantMessageIds.push(assistantId);
-        }
 
         // Response created
         await Promise.resolve(
@@ -464,7 +461,6 @@ describe('OpenAI Realtime Provider', () => {
       // Verify first response
       expect(firstResponse.output).toBe('First response');
       expect(provider.previousItemId).toBe('assistant_1');
-      expect(provider.assistantMessageIds).toContain('assistant_1');
 
       // Second message
       const secondResponsePromise = provider.callApi('Second message', context);
@@ -480,8 +476,6 @@ describe('OpenAI Realtime Provider', () => {
       // Verify second response
       expect(secondResponse.output).toBe('Second response');
       expect(provider.previousItemId).toBe('assistant_2');
-      expect(provider.assistantMessageIds).toContain('assistant_2');
-      expect(provider.assistantMessageIds).toHaveLength(2);
 
       // Verify connection state
       expect(provider.persistentConnection?.close).not.toHaveBeenCalled();
@@ -1137,6 +1131,62 @@ describe('OpenAI Realtime Provider', () => {
         'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
       );
       expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
+    });
+
+    it('omits audio metadata if usage reports audio tokens but no audio chunks arrive', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime');
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+
+      const messageHandlers = mockHandlers.message;
+      const lastHandler = messageHandlers[messageHandlers.length - 1];
+
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.created',
+            item: { id: 'msg_audio_missing', role: 'user' },
+          }),
+        ),
+      );
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.created',
+            response: { id: 'resp_audio_missing' },
+          }),
+        ),
+      );
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.text.done',
+            text: 'Text only fallback',
+          }),
+        ),
+      );
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: {
+              usage: {
+                total_tokens: 10,
+                input_tokens: 4,
+                output_tokens: 6,
+                output_token_details: {
+                  audio_tokens: 3,
+                },
+              },
+            },
+          }),
+        ),
+      );
+
+      const response = await promise;
+      expect(response.output).toBe('Text only fallback');
+      expect(response.metadata?.audio).toBeUndefined();
     });
 
     it('uses apiBaseUrl for client-secret socket URL', async () => {
