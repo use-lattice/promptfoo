@@ -15,7 +15,6 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
-import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
   Assertion,
@@ -26,7 +25,9 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-import type { RedteamHistoryEntry } from '../types';
+import type { RedteamGradingContext } from '../grading/types';
+
+export type { RedteamGradingContext } from '../grading/types';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -304,19 +305,6 @@ export abstract class RedteamPluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
-export interface RedteamGradingContext {
-  traceContext?: TraceContextData | null;
-  traceSummary?: string;
-  // Multi-turn conversation context for graders that need provenance across turns.
-  redteamHistory?: RedteamHistoryEntry[];
-  conversationHistory?: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>;
-  conversationTranscript?: string;
-  // Data exfiltration tracking (for data-exfil grader)
-  wasExfiltrated?: boolean;
-  exfilCount?: number;
-  exfilRecords?: Array<{ queryParams: Record<string, string> }>;
-}
-
 export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;

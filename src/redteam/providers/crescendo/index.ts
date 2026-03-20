@@ -63,6 +63,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
@@ -561,23 +562,7 @@ export class CrescendoProvider implements ApiProvider {
               : undefined;
 
             // Build grading context with tracing and exfil tracking data
-            let gradingContext:
-              | {
-                  traceContext?: TraceContextData | null;
-                  traceSummary?: string;
-                  redteamHistory?: Array<{ prompt: string; output: string }>;
-                  conversationHistory?: Array<{ prompt: string; output: string }>;
-                  conversationTranscript?: string;
-                  wasExfiltrated?: boolean;
-                  exfilCount?: number;
-                  exfilRecords?: Array<{
-                    timestamp: string;
-                    ip: string;
-                    userAgent: string;
-                    queryParams: Record<string, string>;
-                  }>;
-                }
-              | undefined;
+            let gradingContext: RedteamGradingContext | undefined;
 
             // First try to get exfil data from provider response metadata (Playwright provider)
             if (lastResponse.metadata?.wasExfiltrated === undefined) {
