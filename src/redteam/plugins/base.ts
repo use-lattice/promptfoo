@@ -27,8 +27,6 @@ import type {
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
 
-export type { RedteamGradingContext } from '../grading/types';
-
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
