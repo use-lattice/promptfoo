@@ -4,7 +4,13 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
-import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
+import {
+  getDefaultShareViewBaseUrl,
+  getShareApiBaseUrl,
+  getShareViewBaseUrl,
+  SHARE_UPLOAD_FLAG,
+  SHARE_UPLOAD_HEADER,
+} from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
@@ -146,6 +152,11 @@ async function sendEvalRecord(
         },
       };
     }
+
+    evalData = {
+      ...evalData,
+      [SHARE_UPLOAD_FLAG]: true,
+    };
   }
 
   const jsonData = JSON.stringify(evalData);
@@ -374,7 +385,7 @@ async function sendChunkedResults(
   const { silent = false } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
 
-  await checkCloudPermissions(evalRecord.config);
+  await checkCloudPermissions(evalRecord.config, { isShareUpload: true });
 
   const inlineBlobs =
     isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
@@ -416,6 +427,7 @@ async function sendChunkedResults(
   };
   if (cloudConfig.isEnabled()) {
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+    headers[SHARE_UPLOAD_HEADER] = 'true';
   }
 
   // Use total row count (not distinct test count) since we iterate over all result rows

@@ -35,6 +35,8 @@ export const TERMINAL_MAX_WIDTH =
     : 120;
 
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
+export const SHARE_UPLOAD_FLAG = 'isShareUpload';
+export const SHARE_UPLOAD_HEADER = 'x-promptfoo-share-upload';
 
 // Re-export HUMAN_ASSERTION_TYPE from providers/constants for backward compatibility
 // (providers/constants is browser-safe, constants.ts is not due to envars import)

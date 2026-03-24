@@ -12,7 +12,7 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import { checkCloudPermissions, makeRequest } from '../src/util/cloud';
 
 import type Eval from '../src/models/eval';
 import type EvalResult from '../src/models/evalResult';
@@ -442,13 +442,22 @@ describe('createShareableUrl', () => {
 
       await createShareableUrl(mockEval as Eval);
 
+      expect(checkCloudPermissions).toHaveBeenCalledWith(mockEval.config, {
+        isShareUpload: true,
+      });
+
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/results',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"results":[]'),
+          headers: expect.objectContaining({
+            'x-promptfoo-share-upload': 'true',
+          }),
         }),
       );
+      const initialRequestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(initialRequestBody.isShareUpload).toBe(true);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/results/mock-eval-id/results',
         expect.objectContaining({

@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { CLOUD_PROVIDER_PREFIX } from '../constants';
+import { CLOUD_PROVIDER_PREFIX, SHARE_UPLOAD_FLAG } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { ProviderOptionsSchema } from '../validators/providers';
@@ -15,6 +15,10 @@ import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
+
+interface CloudPermissionCheckOptions {
+  isShareUpload?: boolean;
+}
 
 /**
  * Makes an authenticated HTTP request to the PromptFoo Cloud API.
@@ -554,7 +558,10 @@ function convertErrorsToReadableMessage(
  * @throws ConfigPermissionError if permissions are insufficient (403 responses)
  * @throws Error for other critical permission check failures
  */
-export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Promise<void> {
+export async function checkCloudPermissions(
+  config: Partial<UnifiedConfig>,
+  options: CloudPermissionCheckOptions = {},
+): Promise<void> {
   if (!cloudConfig.isEnabled()) {
     return;
   }
@@ -584,6 +591,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
 
     const response = await makeRequest('permissions/check', 'POST', {
       config: minimalConfig,
+      ...(options.isShareUpload ? { [SHARE_UPLOAD_FLAG]: true } : {}),
     });
 
     if (!response.ok) {

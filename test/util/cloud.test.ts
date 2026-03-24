@@ -1197,6 +1197,29 @@ describe('cloud utils', () => {
       );
     });
 
+    it('should include share upload context when requested', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      } as Response);
+
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, { isShareUpload: true }),
+      ).resolves.toBeUndefined();
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/permissions/check',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            config: { providers: ['test-provider'] },
+            isShareUpload: true,
+          }),
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
     it('should throw ConfigPermissionError when response is 403', async () => {
       const errorData = {
         errors: [
