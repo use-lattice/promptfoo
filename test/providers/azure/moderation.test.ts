@@ -226,15 +226,15 @@ describe('Azure Moderation', () => {
       expect(versionKey1).not.toBe(versionKey2);
     });
 
-    it('should ignore apiKey but include headers in the cache key', () => {
+    it('should ignore apiKey and apiKeyEnvar in the cache key', () => {
       const firstKey = getModerationCacheKey(
         'model',
-        { apiKey: 'key-1', endpoint: 'https://test.com' },
+        { apiKey: 'key-1', apiKeyEnvar: 'MY_KEY_1', endpoint: 'https://test.com' },
         'content',
       );
       const secondKey = getModerationCacheKey(
         'model',
-        { apiKey: 'key-2', endpoint: 'https://test.com' },
+        { apiKey: 'key-2', apiKeyEnvar: 'MY_KEY_2', endpoint: 'https://test.com' },
         'content',
       );
 
@@ -294,6 +294,36 @@ describe('Azure Moderation', () => {
       expect(result.cached).toBe(true);
       expect(result.flags).toEqual(mockCachedResponse.flags);
       expect(mockCache.get).toHaveBeenCalled();
+    });
+
+    it('should use resolved endpoint and apiVersion in cache key', async () => {
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as any;
+
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache);
+
+      const { fetchWithProxy } = await import('../../../src/util/fetch/index');
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: true,
+        json: async () => ({ categoriesAnalysis: [] }),
+      } as any);
+
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: {
+          apiKey: 'test-key',
+          endpoint: 'https://resolved-endpoint.cognitiveservices.azure.com/',
+          apiVersion: '2024-09-15-preview',
+        },
+      });
+
+      await provider.callModerationApi('user prompt', 'test content');
+
+      const cacheKey = mockCache.get.mock.calls[0][0] as string;
+      expect(cacheKey).toContain('resolved-endpoint');
+      expect(cacheKey).toContain('2024-09-15-preview');
     });
   });
 });

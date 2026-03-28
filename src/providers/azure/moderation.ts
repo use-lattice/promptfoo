@@ -150,6 +150,12 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown Azure moderation model: ${modelName}`);
     }
+
+    if (config?.blocklistNames != null && !Array.isArray(config.blocklistNames)) {
+      logger.warn(
+        `Azure moderation config blocklistNames should be an array, got ${typeof config.blocklistNames}`,
+      );
+    }
   }
 
   getContentSafetyApiKey(): string | undefined {

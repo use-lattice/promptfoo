@@ -288,13 +288,12 @@ export const providerMap: ProviderFactory[] = [
             'Azure OpenAI does not support moderation. Use azure:moderation instead, which routes to Azure Content Safety.',
           );
         }
-        return new AzureModerationProvider(
+        const resolvedDeployment =
           deploymentName ||
-            providerOptions.config?.deploymentName ||
-            providerOptions.config?.modelName ||
-            'text-content-safety',
-          providerOptions,
-        );
+          providerOptions.config?.deploymentName ||
+          providerOptions.config?.modelName ||
+          'text-content-safety';
+        return new AzureModerationProvider(resolvedDeployment, providerOptions);
       }
       if (modelType === 'chat') {
         return new AzureChatCompletionProvider(deploymentName, providerOptions);

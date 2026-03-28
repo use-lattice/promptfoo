@@ -260,19 +260,36 @@ describe('Provider Registry', () => {
       const factory = providerMap.find((f) => f.test('azure:moderation'));
       expect(factory).toBeDefined();
 
-      const moderationProvider = await factory!.create(
+      // Both prefixes should resolve to the same factory
+      const azureOpenAiFactory = providerMap.find((f) => f.test('azureopenai:moderation'));
+      expect(azureOpenAiFactory).toBe(factory);
+
+      const moderationProvider = (await factory!.create(
         'azure:moderation',
         mockProviderOptions,
         mockContext,
-      );
+      )) as any;
       expect(moderationProvider).toBeDefined();
+      expect(moderationProvider.modelName).toBe('text-content-safety');
 
-      const moderationWithModel = await factory!.create(
-        'azure:moderation:text-content-safety',
+      const moderationWithModel = (await factory!.create(
+        'azure:moderation:custom-model',
         mockProviderOptions,
         mockContext,
-      );
+      )) as any;
       expect(moderationWithModel).toBeDefined();
+      expect(moderationWithModel.modelName).toBe('custom-model');
+
+      // config.deploymentName fallback
+      const moderationFromConfig = (await factory!.create(
+        'azure:moderation',
+        {
+          ...mockProviderOptions,
+          config: { deploymentName: 'config-deployment' },
+        },
+        mockContext,
+      )) as any;
+      expect(moderationFromConfig.modelName).toBe('config-deployment');
 
       await expect(
         factory!.create('azureopenai:moderation', mockProviderOptions, mockContext),
