@@ -293,6 +293,11 @@ export const providerMap: ProviderFactory[] = [
           providerOptions.config?.deploymentName ||
           providerOptions.config?.modelName ||
           'text-content-safety';
+        if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(resolvedDeployment)) {
+          throw new Error(
+            `Unknown Azure moderation model: ${resolvedDeployment}. Supported models: ${AzureModerationProvider.MODERATION_MODEL_IDS.join(', ')}`,
+          );
+        }
         return new AzureModerationProvider(resolvedDeployment, providerOptions);
       }
       if (modelType === 'chat') {
