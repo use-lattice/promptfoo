@@ -135,7 +135,7 @@ describe('HelpOverlay Integration', () => {
 
     const output = lastFrame();
     expect(output).toContain('GENERAL');
-    expect(output).toContain('Quit');
+    expect(output).toContain('Exit table');
   });
 
   it('should show history shortcut when available', () => {

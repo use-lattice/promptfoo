@@ -17,6 +17,8 @@ describe('EvalHelpOverlay', () => {
 
     expect(frame).toContain('q');
     expect(frame).toContain('Esc');
+    expect(frame).toContain('Ctrl+C');
+    expect(frame).toContain('Stop run and exit');
     expect(frame).toContain('v');
     expect(frame).toContain('verbose');
     expect(frame).toContain('?');
@@ -45,7 +47,8 @@ describe('EvalHelpOverlay', () => {
     const onClose = vi.fn();
     const { lastFrame } = render(<EvalHelpOverlay onClose={onClose} />);
 
-    expect(lastFrame()).toContain('Press any key to close');
+    expect(lastFrame()).toContain('Shortcuts apply after closing help.');
+    expect(lastFrame()).toContain('Press any key to close help');
   });
 
   it('should display category headers', () => {

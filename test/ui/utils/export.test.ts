@@ -153,6 +153,42 @@ describe('export utility', () => {
         const result = convertTableToFormat(mockTable, 'yaml');
         expect(result).toContain('# Promptfoo Evaluation Results');
       });
+
+      it('should preserve full variable and output text without truncation', () => {
+        const longText = 'x'.repeat(260);
+        const result = convertTableToFormat(
+          {
+            head: {
+              vars: ['input'],
+              prompts: [{ provider: 'openai:gpt-4', label: 'GPT-4', raw: '', display: '' }],
+            },
+            body: [
+              {
+                testIdx: 0,
+                vars: [longText],
+                test: { vars: { input: longText } },
+                outputs: [
+                  {
+                    pass: true,
+                    score: 1,
+                    text: longText,
+                    cost: 0,
+                    latencyMs: 0,
+                    id: 'long-output',
+                    failureReason: null as any,
+                    namedScores: {},
+                    prompt: 'prompt',
+                    testCase: { vars: {} },
+                  },
+                ],
+              },
+            ],
+          },
+          'yaml',
+        );
+
+        expect(result).toContain(longText);
+      });
     });
 
     describe('csv format', () => {

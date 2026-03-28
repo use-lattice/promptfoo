@@ -114,6 +114,14 @@ describe('parseFilterCommand', () => {
         error: null,
       });
     });
+
+    it('parses indexed variable filters', () => {
+      const result = parseFilterCommand('filter var:0 = hello');
+      expect(result).toEqual({
+        filter: { column: 'var:0', operator: '=', value: 'hello' },
+        error: null,
+      });
+    });
   });
 
   describe('case insensitivity', () => {
@@ -174,6 +182,11 @@ describe('parseFilterCommand', () => {
     it('returns error for unknown column', () => {
       const result = parseFilterCommand('filter unknown > 0.5');
       expect('error' in result && result.error).toContain('Unknown column');
+    });
+
+    it('returns error for invalid variable column syntax', () => {
+      const result = parseFilterCommand('filter var:name = hello');
+      expect('error' in result && result.error).toContain('Invalid variable column');
     });
 
     it('returns error for invalid command with unrecognized operator', () => {

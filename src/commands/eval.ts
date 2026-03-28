@@ -656,6 +656,9 @@ export async function doEval(
 
     // Track pending share for display after table (shared across Ink UI and table display)
     let pendingInkShare: Promise<string | null> | null = null;
+    let pendingInkShareSettled = false;
+    let inkShareCancelled = false;
+    let inkShareAbortController: AbortController | null = null;
     let inkUISucceeded = false;
     let evalStarted = false;
 
@@ -821,8 +824,23 @@ export async function doEval(
               // Update UI to show sharing in progress
               inkSession.controller.setSharingStatus('sharing');
 
+              inkShareAbortController = new AbortController();
+
               // Start sharing in background - don't await
-              pendingInkShare = createShareableUrl(evalRecord, { showAuth: false, silent: true });
+              pendingInkShare = createShareableUrl(evalRecord, {
+                showAuth: false,
+                silent: true,
+                abortSignal: inkShareAbortController.signal,
+              })
+                .catch((err) => {
+                  if (inkShareAbortController?.signal.aborted) {
+                    return null;
+                  }
+                  throw err;
+                })
+                .finally(() => {
+                  pendingInkShareSettled = true;
+                });
 
               // Handle share completion asynchronously - updates UI while table is visible
               pendingInkShare
@@ -830,26 +848,42 @@ export async function doEval(
                   if (url) {
                     inkSession.controller.setSharingStatus('completed', url);
                     evalRecord.shared = true;
+                  } else if (inkShareAbortController?.signal.aborted) {
+                    logger.debug('Share aborted after Ink session exit');
                   } else {
                     inkSession.controller.setSharingStatus('failed');
                   }
                 })
                 .catch((err) => {
+                  if (inkShareAbortController?.signal.aborted) {
+                    logger.debug('Share aborted after Ink session exit');
+                    return;
+                  }
                   logger.debug(`Share failed: ${err}`);
                   inkSession.controller.setSharingStatus('failed');
                 });
             }
 
             const waitForCompletionState = async () => {
-              if (pendingInkShare !== null) {
-                await Promise.allSettled([pendingInkShare]);
-              }
-              await Promise.race([
-                inkSession.renderResult.waitUntilExit(),
-                new Promise((resolve) =>
-                  setTimeout(resolve, pendingInkShare !== null ? 5000 : 3000),
+              const completionOutcome = await Promise.race([
+                inkSession.renderResult.waitUntilExit().then(() => 'exit' as const),
+                new Promise<'timeout'>((resolve) =>
+                  setTimeout(resolve, pendingInkShare !== null ? 30000 : 15000),
                 ),
               ]);
+
+              if (
+                pendingInkShare !== null &&
+                !pendingInkShareSettled &&
+                inkShareAbortController &&
+                !inkShareAbortController.signal.aborted
+              ) {
+                inkShareCancelled = true;
+                inkShareAbortController.abort();
+                pendingInkShare = null;
+              }
+
+              return completionOutcome;
             };
 
             // Transition to results table within the same Ink session
@@ -967,7 +1001,7 @@ export async function doEval(
     // Unify share promise: use Ink's background share if it was already started,
     // otherwise start a new one. This ensures shareableUrl is available for file exports.
     let sharePromise: Promise<string | null> | null = pendingInkShare ?? null;
-    if (willShare && !sharePromise) {
+    if (willShare && !sharePromise && !inkShareCancelled) {
       sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
 

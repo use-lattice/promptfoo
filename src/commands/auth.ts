@@ -121,16 +121,30 @@ export function authCommand(program: Command) {
               const authUI = await initInkAuth({ initialPhase: 'logging_in' });
               const globalConfigSnapshot = structuredClone(readGlobalConfig());
               let loginCommitted = false;
+              let authCancelled = false;
 
               // Suppress unhandled rejection on teamSelection if we never await it
               // (e.g., single-team path or ErrorBoundary crash)
               authUI.teamSelection.catch(() => {});
+              authUI.result
+                .then((result) => {
+                  if (result === AUTH_CANCELLED) {
+                    authCancelled = true;
+                  }
+                })
+                .catch(() => {});
 
               try {
                 authUI.controller.setStatusMessage('Validating API key...');
 
                 // Perform core login logic
                 const result = await performApiKeyLogin(token, apiHost, cmdObj.team);
+
+                if (authCancelled) {
+                  restoreGlobalConfigSnapshot(globalConfigSnapshot);
+                  logger.info('Login cancelled.');
+                  return;
+                }
 
                 let selectedTeamName: string | undefined = result.selectedTeam?.name;
 
@@ -162,6 +176,12 @@ export function authCommand(program: Command) {
                     cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
                     selectedTeamName = defaultTeam.name;
                   }
+                }
+
+                if (authCancelled) {
+                  restoreGlobalConfigSnapshot(globalConfigSnapshot);
+                  logger.info('Login cancelled.');
+                  return;
                 }
 
                 // Show success

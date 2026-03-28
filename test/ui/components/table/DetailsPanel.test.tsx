@@ -394,10 +394,10 @@ describe('DetailsPanel', () => {
     );
 
     const output = lastFrame();
-    expect(output).toContain('[j/k]');
+    expect(output).toContain('[↑/↓ or j/k]');
     expect(output).toContain('[Tab]');
     expect(output).toContain('[y]');
-    expect(output).toContain('[q]');
+    expect(output).toContain('[Esc/q]');
   });
 
   it('should show failed assertion details', () => {

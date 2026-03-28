@@ -184,6 +184,22 @@ describe('navigationReducer', () => {
     });
   });
 
+  describe('column jumps', () => {
+    it('jumps to the first valid column', () => {
+      const state = createNavigationState({ selectedCol: 4 });
+      const result = navigationReducer(state, { type: 'GO_FIRST_COL' }, defaultBounds);
+
+      expect(result.selectedCol).toBe(1);
+    });
+
+    it('jumps to the last column', () => {
+      const state = createNavigationState({ selectedCol: 1 });
+      const result = navigationReducer(state, { type: 'GO_LAST_COL' }, defaultBounds);
+
+      expect(result.selectedCol).toBe(4);
+    });
+  });
+
   describe('NAVIGATE_EXPANDED - wrapping behavior', () => {
     it('wraps from first row to last row on up', () => {
       const state = createNavigationState({

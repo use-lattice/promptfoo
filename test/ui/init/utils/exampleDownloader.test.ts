@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -6,6 +7,7 @@ import {
   fetchExampleList,
   getExampleDescription,
   resetTreeCache,
+  resolveExampleTargetDirectory,
 } from '../../../../src/ui/init/utils/exampleDownloader';
 import { fetchWithProxy } from '../../../../src/util/fetch';
 
@@ -114,6 +116,19 @@ describe('fetchExampleList', () => {
     const result = await fetchExampleList();
 
     expect(result).toEqual(['alpha', 'beta', 'zebra']);
+  });
+
+  it('filters out unsafe example directory names from the fetched tree', async () => {
+    vi.mocked(fetchWithProxy).mockResolvedValue(
+      mockTreeResponse([
+        { path: 'examples/valid-example/promptfooconfig.yaml', type: 'blob' },
+        { path: 'examples/../escaped/promptfooconfig.yaml', type: 'blob' },
+      ]),
+    );
+
+    const result = await fetchExampleList();
+
+    expect(result).toEqual(['valid-example']);
   });
 });
 
@@ -245,6 +260,54 @@ describe('downloadExample', () => {
     expect(result.success).toBe(true);
     expect(result.filesDownloaded).toContain('file.yaml');
     expect(result.filesDownloaded).toContain('subdir/nested.yaml');
+  });
+
+  it('should reject unsafe file paths from the repository tree', async () => {
+    vi.mocked(fetchWithProxy).mockImplementation(async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/git/trees/')) {
+        return mockTreeResponse([{ path: 'examples/test/../../escape.yaml', type: 'blob' }]);
+      }
+      return {
+        ok: true,
+        text: vi.fn().mockResolvedValue('content'),
+      } as unknown as Response;
+    });
+
+    const result = await downloadExample('test', '/output');
+
+    expect(result.success).toBe(false);
+    expect(result.errors).toContainEqual({
+      file: 'examples/test/../../escape.yaml',
+      error: 'Invalid example file path',
+    });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveExampleTargetDirectory', () => {
+  it('creates a dedicated directory when no output directory is provided', () => {
+    expect(resolveExampleTargetDirectory(undefined, 'openai-chat')).toBe(
+      path.resolve(process.cwd(), 'openai-chat'),
+    );
+  });
+
+  it('creates a dedicated directory when the output directory is .', () => {
+    expect(resolveExampleTargetDirectory('.', 'openai-chat')).toBe(
+      path.resolve(process.cwd(), 'openai-chat'),
+    );
+  });
+
+  it('respects an explicit output directory', () => {
+    expect(resolveExampleTargetDirectory('./custom-dir', 'openai-chat')).toBe(
+      path.resolve(process.cwd(), './custom-dir'),
+    );
+  });
+
+  it('rejects unsafe example names', () => {
+    expect(() => resolveExampleTargetDirectory(undefined, '../escape')).toThrow(
+      'Invalid example name',
+    );
   });
 });
 

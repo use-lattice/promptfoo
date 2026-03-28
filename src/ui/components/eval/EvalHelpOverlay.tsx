@@ -32,7 +32,7 @@ function getShortcutCategories(hasErrors: boolean): ShortcutCategory[] {
     },
     {
       name: 'General',
-      shortcuts: [{ keys: ['q', 'Esc'], description: 'Cancel evaluation and exit' }],
+      shortcuts: [{ keys: ['q', 'Esc', 'Ctrl+C'], description: 'Stop run and exit' }],
     },
   ];
 }
@@ -73,7 +73,7 @@ export function EvalHelpOverlay({
       {/* Content */}
       <Box flexDirection="column">
         {categories.map((category, index) => (
-          <CategorySection key={index} category={category} keySeparator=" / " keyWidth={12} />
+          <CategorySection key={index} category={category} keySeparator=" / " keyWidth={16} />
         ))}
       </Box>
 
@@ -84,18 +84,23 @@ export function EvalHelpOverlay({
       </Box>
 
       {/* Footer */}
-      <Box
-        justifyContent="center"
-        marginTop={1}
-        borderStyle="single"
-        borderTop
-        borderBottom={false}
-        borderLeft={false}
-        borderRight={false}
-        borderColor="gray"
-        paddingTop={1}
-      >
-        <Text color="gray">Press any key to close</Text>
+      <Box flexDirection="column" marginTop={1}>
+        <Box justifyContent="center">
+          <Text color="gray">Shortcuts apply after closing help.</Text>
+        </Box>
+        <Box
+          justifyContent="center"
+          marginTop={1}
+          borderStyle="single"
+          borderTop
+          borderBottom={false}
+          borderLeft={false}
+          borderRight={false}
+          borderColor="gray"
+          paddingTop={1}
+        >
+          <Text color="gray">Press any key to close help</Text>
+        </Box>
       </Box>
     </Box>
   );

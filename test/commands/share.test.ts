@@ -257,7 +257,7 @@ describe('Share Command', () => {
         config: {},
         results: [{ id: 'result-1' }],
       } as unknown as Eval;
-      const waitUntilExit = vi.fn().mockResolvedValue(undefined);
+      const waitUntilExit = vi.fn().mockImplementation(() => new Promise<void>(() => {}));
 
       vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
       vi.mocked(loadDefaultConfig).mockResolvedValue({ defaultConfig: undefined } as any);
@@ -297,11 +297,61 @@ describe('Share Command', () => {
           teamName: 'Security',
         },
       });
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
-        showAuth: false,
-        silent: true,
-      });
-      expect(waitUntilExit).not.toHaveBeenCalled();
+      expect(createShareableUrl).toHaveBeenCalledWith(
+        mockEval,
+        expect.objectContaining({
+          showAuth: false,
+          silent: true,
+          abortSignal: expect.any(AbortSignal),
+        }),
+      );
+    });
+
+    it('should abort an in-flight interactive share when the Ink session exits', async () => {
+      const mockEval = {
+        id: 'eval-test-123',
+        prompts: ['test'],
+        config: {},
+        results: [{ id: 'result-1' }],
+      } as unknown as Eval;
+
+      vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+      vi.mocked(loadDefaultConfig).mockResolvedValue({ defaultConfig: undefined } as any);
+      vi.mocked(isSharingEnabled).mockImplementation(() => true);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      vi.mocked(shouldUseInkShare).mockReturnValue(true);
+      vi.mocked(getOrgContext).mockResolvedValue(null);
+      vi.mocked(ensureShareAuthorEmail).mockResolvedValue(undefined);
+      vi.mocked(createShareableUrl).mockImplementation(
+        async (_eval, options?: { abortSignal?: AbortSignal }) =>
+          await new Promise<string | null>((resolve) => {
+            options?.abortSignal?.addEventListener('abort', () => resolve(null), { once: true });
+          }),
+      );
+      vi.mocked(initInkShare).mockResolvedValue({
+        controller: {
+          setPhase: vi.fn(),
+          setProgress: vi.fn(),
+          complete: vi.fn(),
+          error: vi.fn(),
+        },
+        cleanup: vi.fn(),
+        confirmation: Promise.resolve(true),
+        result: Promise.resolve(undefined),
+        renderResult: { waitUntilExit: vi.fn().mockResolvedValue(undefined) } as any,
+      } as any);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', 'eval-test-123']);
+
+      expect(createShareableUrl).toHaveBeenCalledWith(
+        mockEval,
+        expect.objectContaining({
+          silent: true,
+          abortSignal: expect.any(AbortSignal),
+        }),
+      );
+      expect(process.exitCode).toBe(0);
     });
 
     it('should keep the Ink error state mounted until dismissal', async () => {
@@ -311,7 +361,10 @@ describe('Share Command', () => {
         config: {},
         results: [{ id: 'result-1' }],
       } as unknown as Eval;
-      const waitUntilExit = vi.fn().mockResolvedValue(undefined);
+      const waitUntilExit = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>(() => {}))
+        .mockResolvedValueOnce(undefined);
       const controller = {
         setPhase: vi.fn(),
         setProgress: vi.fn(),

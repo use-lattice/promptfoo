@@ -5,7 +5,7 @@
  * to the step components.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useMachine } from '@xstate/react';
 import { Box, Text, useApp, useInput } from 'ink';
@@ -15,7 +15,7 @@ import {
   downloadExample,
   fetchExampleList,
   generateFiles,
-  normalizeDirectory,
+  resolveExampleTargetDirectory,
   writeFiles,
 } from '../utils';
 import { StepIndicator } from './shared/StepIndicator';
@@ -95,10 +95,46 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
   const [examplesError, setExamplesError] = useState<string | null>(null);
   const [exampleList, setExampleList] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [downloadedExampleFiles, setDownloadedExampleFiles] = useState<string[]>([]);
+  const [exampleTargetDirectory, setExampleTargetDirectory] = useState<string | null>(null);
   const [filesWritten, setFilesWritten] = useState<string[]>([]);
+  const completionResolvedRef = useRef(false);
+
+  const isCompleteState =
+    stateMatches('project.complete') ||
+    stateMatches('example.complete') ||
+    stateMatches('redteam.complete');
+
+  const resolveCompletion = useCallback(() => {
+    if (completionResolvedRef.current) {
+      return;
+    }
+    completionResolvedRef.current = true;
+    const directory =
+      stateMatches('example.complete') && exampleTargetDirectory
+        ? exampleTargetDirectory
+        : state.context.outputDirectory;
+    onComplete?.({
+      directory,
+      filesWritten: state.context.filesWritten,
+    });
+  }, [
+    exampleTargetDirectory,
+    onComplete,
+    state.context.filesWritten,
+    state.context.outputDirectory,
+    stateMatches,
+  ]);
 
   // Handle global keyboard shortcuts
   useInput((input, key) => {
+    if (isCompleteState) {
+      if (input || Object.values(key).some(Boolean)) {
+        resolveCompletion();
+      }
+      return;
+    }
+
     // Ctrl+C to cancel
     if (input === 'c' && key.ctrl) {
       send({ type: 'CANCEL' });
@@ -121,18 +157,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
       onCancel?.();
       exit();
     }
-
-    if (
-      stateMatches('project.complete') ||
-      stateMatches('example.complete') ||
-      stateMatches('redteam.complete')
-    ) {
-      onComplete?.({
-        directory: state.context.outputDirectory,
-        filesWritten: state.context.filesWritten,
-      });
-    }
-  }, [state, exit, onComplete, onCancel, stateMatches]);
+  }, [exit, onCancel, stateMatches]);
 
   // Load examples when entering example selection
   useEffect(() => {
@@ -155,12 +180,25 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
   // Handle example download
   const handleDownloadExample = useCallback(
     async (exampleName: string) => {
-      const targetDir = normalizeDirectory(state.context.outputDirectory || exampleName);
+      const targetDir = resolveExampleTargetDirectory(state.context.outputDirectory, exampleName);
+      setExampleTargetDirectory(targetDir);
+      setDownloadedExampleFiles([]);
+      setDownloadProgress({
+        currentFile: '',
+        filesDownloaded: 0,
+        totalFiles: 0,
+        percentage: 0,
+      });
 
       send({ type: 'SELECT_EXAMPLE', example: exampleName });
 
       const result = await downloadExample(exampleName, targetDir, (progress) => {
         setDownloadProgress(progress);
+        if (progress.currentFile) {
+          setDownloadedExampleFiles((prev) =>
+            prev[prev.length - 1] === progress.currentFile ? prev : [...prev, progress.currentFile],
+          );
+        }
       });
 
       if (result.success) {
@@ -349,12 +387,12 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
       );
     }
 
-    if (stateMatches('example.downloading') && downloadProgress) {
+    if (stateMatches('example.downloading')) {
       return (
         <DownloadProgressComponent
           exampleName={state.context.exampleName || ''}
-          progress={downloadProgress.percentage}
-          downloadedFiles={state.context.filesWritten}
+          progress={downloadProgress?.percentage ?? 0}
+          downloadedFiles={downloadedExampleFiles}
         />
       );
     }
@@ -363,7 +401,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
       return (
         <DownloadCompleteComponent
           exampleName={state.context.exampleName || ''}
-          directory={state.context.outputDirectory}
+          directory={exampleTargetDirectory || state.context.outputDirectory}
           filesCount={state.context.filesWritten.length}
         />
       );

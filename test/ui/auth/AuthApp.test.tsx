@@ -153,7 +153,7 @@ describe('AuthApp', () => {
     it('should call onTeamSelect when team is selected', async () => {
       const onTeamSelect = vi.fn();
 
-      const { stdin, controller } = renderWithController({
+      const { stdin, lastFrame, controller } = renderWithController({
         initialPhase: 'logging_in',
         onTeamSelect,
       });
@@ -178,6 +178,53 @@ describe('AuthApp', () => {
         name: 'Team One',
         slug: 'team-one',
       });
+      expect(lastFrame()).toContain('Selecting Team One...');
+    });
+
+    it('should submit team selection only once', async () => {
+      const onTeamSelect = vi.fn();
+
+      const { stdin, controller } = renderWithController({
+        initialPhase: 'logging_in',
+        onTeamSelect,
+      });
+
+      controller.showTeamSelector([
+        { id: '1', name: 'Team One', slug: 'team-one' },
+        { id: '2', name: 'Team Two', slug: 'team-two' },
+      ]);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      stdin.write('\r');
+      stdin.write('\r');
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(onTeamSelect).toHaveBeenCalledTimes(1);
+    });
+
+    it('should support vim-style team navigation with j/k', async () => {
+      const { stdin, lastFrame, controller } = renderWithController({
+        initialPhase: 'logging_in',
+      });
+
+      controller.showTeamSelector([
+        { id: '1', name: 'Team One', slug: 'team-one' },
+        { id: '2', name: 'Team Two', slug: 'team-two' },
+      ]);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(lastFrame()).toContain('❯ Team One');
+
+      stdin.write('j');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(lastFrame()).toContain('❯ Team Two');
+
+      stdin.write('k');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(lastFrame()).toContain('❯ Team One');
     });
   });
 });

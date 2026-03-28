@@ -71,6 +71,13 @@ describe('calculateTableLayout', () => {
     expect(layout.isCompact).toBe(true);
   });
 
+  it('sets isCompact when the terminal cannot fit the minimum column widths', () => {
+    const data = createMockTableData(2, 3, 5);
+    const layout = calculateTableLayout(data, 80, 30);
+
+    expect(layout.isCompact).toBe(true);
+  });
+
   it('sets isCompact to false for wide terminals', () => {
     const data = createMockTableData(2, 2, 5);
     const layout = calculateTableLayout(data, 120, 30);

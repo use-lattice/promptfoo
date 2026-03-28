@@ -16,6 +16,7 @@ import type {
   EvaluateTable,
   PromptMetrics,
   RunEvalOptions,
+  TokenUsage,
 } from '../types/index';
 import type { EvalAction, LogEntry, SessionPhase, SharingStatus } from './contexts/EvalContext';
 import type { ProviderDefinition, ProviderInput } from './machines/evalMachine';
@@ -61,6 +62,10 @@ function createBatchingDispatcher(dispatch: (action: EvalAction) => void) {
     if (disposed) {
       return;
     }
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
     if (pendingItems.length > 0) {
       dispatch({
         type: 'BATCH_PROGRESS',
@@ -68,7 +73,6 @@ function createBatchingDispatcher(dispatch: (action: EvalAction) => void) {
       });
       pendingItems.length = 0;
     }
-    flushTimer = null;
     isFirstInBatch = true;
   }
 
@@ -143,6 +147,38 @@ interface PromptTrackingState {
   lastMetrics: PromptMetrics | null;
 }
 
+interface TokenTotals {
+  total: number;
+  prompt: number;
+  completion: number;
+  cached: number;
+  reasoning: number;
+}
+
+function getTokenTotalsFromUsage(tokenUsage?: TokenUsage): TokenTotals {
+  return {
+    total: tokenUsage?.total ?? 0,
+    prompt: tokenUsage?.prompt ?? 0,
+    completion: tokenUsage?.completion ?? 0,
+    cached: tokenUsage?.cached ?? 0,
+    reasoning: tokenUsage?.completionDetails?.reasoning ?? 0,
+  };
+}
+
+function getAssertionTokenTotals(metrics?: PromptMetrics): TokenTotals {
+  return getTokenTotalsFromUsage(metrics?.tokenUsage?.assertions);
+}
+
+function getTokenDelta(current: TokenTotals, previous: TokenTotals): TokenTotals {
+  return {
+    total: Math.max(0, current.total - previous.total),
+    prompt: Math.max(0, current.prompt - previous.prompt),
+    completion: Math.max(0, current.completion - previous.completion),
+    cached: Math.max(0, current.cached - previous.cached),
+    reasoning: Math.max(0, current.reasoning - previous.reasoning),
+  };
+}
+
 /**
  * Creates a progress callback that uses batching for high-concurrency performance.
  * Instead of dispatching every progress update immediately, updates are queued
@@ -166,6 +202,7 @@ function createProgressCallbackWithBatching(
 ) => void {
   // Track state between callbacks for delta calculations - PER PROMPT
   const promptStateByKey = new Map<string, PromptTrackingState>();
+  const providerGradingTotals = new Map<string, TokenTotals>();
 
   return (
     completed: number,
@@ -190,8 +227,11 @@ function createProgressCallbackWithBatching(
 
     // Calculate deltas from last callback FOR THIS PROMPT
     let outcome = progress?.outcome;
-    let latencyMs = 0;
-    let cost = 0;
+    let latencyMs = progress?.latencyMs ?? 0;
+    let cost = progress?.cost ?? 0;
+    let gradingDelta = progress?.assertionTokens
+      ? getTokenTotalsFromUsage(progress.assertionTokens)
+      : null;
 
     if (metrics) {
       // Get or create per-prompt tracking state
@@ -215,6 +255,12 @@ function createProgressCallbackWithBatching(
       const deltaError = metrics.testErrorCount - prevError;
       const deltaLatency = metrics.totalLatencyMs - prevLatency;
       const deltaCost = metrics.cost - prevCost;
+      if (!gradingDelta) {
+        gradingDelta = getTokenDelta(
+          getAssertionTokenTotals(metrics),
+          getAssertionTokenTotals(lastMetrics ?? undefined),
+        );
+      }
 
       if (!outcome) {
         // Determine test result from metric deltas when the evaluator did not provide it explicitly.
@@ -249,31 +295,48 @@ function createProgressCallbackWithBatching(
         }
       }
 
-      latencyMs = Math.max(0, deltaLatency);
-      cost = Math.max(0, deltaCost);
+      if (progress?.latencyMs === undefined) {
+        latencyMs = Math.max(0, deltaLatency);
+      }
+      if (progress?.cost === undefined) {
+        cost = Math.max(0, deltaCost);
+      }
 
       // Update tracking state
       promptState.lastMetrics = { ...metrics };
     }
 
     // Grading tokens are still dispatched directly (low frequency, important accuracy)
-    if (metrics?.tokenUsage?.assertions) {
-      const assertions = metrics.tokenUsage.assertions;
-      if (assertions.total != null && assertions.total > 0) {
-        dispatch({
-          type: 'SET_GRADING_TOKENS',
-          payload: {
-            providerId,
-            tokens: {
-              total: assertions.total ?? 0,
-              prompt: assertions.prompt ?? 0,
-              completion: assertions.completion ?? 0,
-              cached: assertions.cached ?? 0,
-              reasoning: assertions.completionDetails?.reasoning ?? 0,
-            },
-          },
-        });
-      }
+    if (
+      gradingDelta &&
+      (gradingDelta.total > 0 ||
+        gradingDelta.prompt > 0 ||
+        gradingDelta.completion > 0 ||
+        gradingDelta.cached > 0 ||
+        gradingDelta.reasoning > 0)
+    ) {
+      const previousProviderTotals = providerGradingTotals.get(providerId) ?? {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        reasoning: 0,
+      };
+      const nextProviderTotals = {
+        total: previousProviderTotals.total + gradingDelta.total,
+        prompt: previousProviderTotals.prompt + gradingDelta.prompt,
+        completion: previousProviderTotals.completion + gradingDelta.completion,
+        cached: previousProviderTotals.cached + gradingDelta.cached,
+        reasoning: previousProviderTotals.reasoning + gradingDelta.reasoning,
+      };
+      providerGradingTotals.set(providerId, nextProviderTotals);
+      dispatch({
+        type: 'SET_GRADING_TOKENS',
+        payload: {
+          providerId,
+          tokens: nextProviderTotals,
+        },
+      });
     }
 
     // Queue progress update for batching (instead of direct dispatch)
@@ -366,6 +429,7 @@ export function createEvalUIController(dispatch: Dispatch<EvalAction>): EvalUICo
     },
 
     startGrading: (completed: number, total: number) => {
+      batcher.flushBatch();
       dispatch({ type: 'START_GRADING', payload: { completed, total } });
     },
 

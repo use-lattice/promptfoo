@@ -1574,19 +1574,11 @@ class Evaluator {
           await writer.write(row);
         }
 
-        // Check for non-transient HTTP errors from target (401, 403, 404, 501)
-        // These indicate the target is unavailable/misconfigured and won't resolve on retry
         const httpStatus = row.response?.metadata?.http?.status;
-        if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {
-          targetUnavailable = true;
-          targetErrorStatus = httpStatus;
-          logger.error(
-            `Target returned HTTP ${httpStatus}. Aborting scan - this error will not resolve on retry.`,
-          );
-          targetErrorAbortController.abort();
-          // Break out of the row processing loop - result is already saved
-          break;
-        }
+        const nonTransientTargetStatus =
+          typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)
+            ? httpStatus
+            : null;
 
         const { promptIdx } = row;
         const metrics = prompts[promptIdx].metrics;
@@ -1689,8 +1681,24 @@ class Evaluator {
                   ? 'error'
                   : 'fail',
               providerTotal: providerTotals.get(getProviderUiKey(evalStep.provider)),
+              latencyMs: row.latencyMs ?? 0,
+              cost: row.cost ?? 0,
+              assertionTokens: row.gradingResult?.tokensUsed,
             },
           );
+        }
+
+        if (nonTransientTargetStatus !== null) {
+          if (!targetUnavailable) {
+            targetUnavailable = true;
+            targetErrorStatus = nonTransientTargetStatus;
+            logger.error(
+              `Target returned HTTP ${nonTransientTargetStatus}. Aborting scan - this error will not resolve on retry.`,
+            );
+            targetErrorAbortController.abort();
+          }
+          // Break out of the row processing loop after metrics/progress bookkeeping.
+          break;
         }
       }
     };
@@ -1819,6 +1827,8 @@ class Evaluator {
             {
               outcome: 'error',
               providerTotal: providerTotals.get(getProviderUiKey(evalStep.provider)),
+              latencyMs: timeoutMs,
+              cost: 0,
             },
           );
         }

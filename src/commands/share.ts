@@ -248,15 +248,37 @@ export function shareCommand(program: Command) {
 
               // Perform the share
               shareUI.controller.setPhase('uploading');
+              const shareAbortController = new AbortController();
               try {
-                const url = await createShareableUrl(eval_, {
+                const sharePromise = createShareableUrl(eval_, {
                   showAuth: cmdObj.showAuth,
                   silent: true,
+                  abortSignal: shareAbortController.signal,
+                }).catch((err) => {
+                  if (shareAbortController.signal.aborted) {
+                    return null;
+                  }
+                  throw err;
                 });
-                if (url) {
-                  shareUI.controller.complete(url);
+                const sessionExitPromise = shareUI.renderResult
+                  .waitUntilExit()
+                  .then(() => ({ type: 'exit' as const }));
+
+                const outcome = await Promise.race([
+                  sharePromise.then((url) => ({ type: 'upload' as const, url })),
+                  sessionExitPromise,
+                ]);
+
+                if (outcome.type === 'exit') {
+                  shareAbortController.abort();
+                  process.exitCode = 0;
+                  return;
+                }
+
+                if (outcome.url) {
+                  shareUI.controller.complete(outcome.url);
                   // Wait for user to acknowledge
-                  await shareUI.result;
+                  await Promise.race([shareUI.result, sessionExitPromise]);
                 } else {
                   shareUI.controller.error('Failed to create shareable URL');
                   await shareUI.renderResult.waitUntilExit();

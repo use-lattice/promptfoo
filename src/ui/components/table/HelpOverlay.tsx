@@ -25,21 +25,30 @@ function getShortcutCategories(historyAvailable: boolean): ShortcutCategory[] {
         { keys: ['↓', 'j'], description: 'Move down' },
         { keys: ['←', 'h'], description: 'Move left' },
         { keys: ['→', 'l'], description: 'Move right' },
-        { keys: ['g'], description: 'Jump to top' },
-        { keys: ['G'], description: 'Jump to bottom' },
-        { keys: ['0'], description: 'First column' },
-        { keys: ['$'], description: 'Last column' },
+        { keys: ['g'], description: 'Jump to top (Home/Fn←)' },
+        { keys: ['G'], description: 'Jump to bottom (End/Fn→)' },
+        { keys: ['0', 'Ctrl+a'], description: 'First column' },
+        { keys: ['$', 'Ctrl+e'], description: 'Last column' },
         { keys: ['PgUp'], description: 'Page up' },
         { keys: ['PgDn'], description: 'Page down' },
-        { keys: ['Home'], description: 'Start of row' },
-        { keys: ['End'], description: 'End of row' },
+        { keys: ['Ctrl+u'], description: 'Half page up' },
+        { keys: ['Ctrl+d'], description: 'Half page down' },
       ],
     },
     {
       name: 'Actions',
       shortcuts: [
+        { keys: ['Enter'], description: 'Open cell details' },
         { keys: ['x'], description: 'Export to file' },
-        { keys: ['y'], description: 'Copy to clipboard' },
+        { keys: ['y'], description: 'Copy selected cell' },
+      ],
+    },
+    {
+      name: 'Filters',
+      shortcuts: [
+        { keys: ['a', 'p', 'f', 'e', 'd'], description: 'Quick filters' },
+        { keys: ['/'], description: 'Search rows' },
+        { keys: [':'], description: 'Command mode (:filter, :clear, :50)' },
       ],
     },
     {
@@ -53,7 +62,7 @@ function getShortcutCategories(historyAvailable: boolean): ShortcutCategory[] {
       name: 'General',
       shortcuts: [
         { keys: ['Esc'], description: 'Close overlay' },
-        { keys: ['q'], description: 'Quit' },
+        { keys: ['q'], description: 'Exit table' },
       ],
     },
   ];
@@ -81,8 +90,9 @@ export function HelpOverlay({
 
   // Split categories into two columns for wider display
   const useWideLayout = terminalWidth >= LIMITS.WIDE_LAYOUT_MIN_WIDTH;
-  const leftCategories = useWideLayout ? categories.slice(0, 1) : categories;
-  const rightCategories = useWideLayout ? categories.slice(1) : [];
+  const midpoint = Math.ceil(categories.length / 2);
+  const leftCategories = useWideLayout ? categories.slice(0, midpoint) : categories;
+  const rightCategories = useWideLayout ? categories.slice(midpoint) : [];
 
   const boxWidth = Math.min(terminalWidth - 4, 72);
   const columnWidth = useWideLayout ? Math.floor((boxWidth - 6) / 2) : boxWidth - 4;
@@ -132,18 +142,23 @@ export function HelpOverlay({
       )}
 
       {/* Footer */}
-      <Box
-        justifyContent="center"
-        marginTop={1}
-        borderStyle="single"
-        borderTop
-        borderBottom={false}
-        borderLeft={false}
-        borderRight={false}
-        borderColor="gray"
-        paddingTop={1}
-      >
-        <Text color="gray">Press any key to close</Text>
+      <Box flexDirection="column" marginTop={1}>
+        <Box justifyContent="center">
+          <Text color="gray">Shortcuts apply after closing help.</Text>
+        </Box>
+        <Box
+          justifyContent="center"
+          marginTop={1}
+          borderStyle="single"
+          borderTop
+          borderBottom={false}
+          borderLeft={false}
+          borderRight={false}
+          borderColor="gray"
+          paddingTop={1}
+        >
+          <Text color="gray">Press any key to close help</Text>
+        </Box>
       </Box>
     </Box>
   );

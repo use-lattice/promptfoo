@@ -66,6 +66,23 @@ describe('generateConfig', () => {
     expect(parsed.providers).toContain('anthropic:claude-3-sonnet');
   });
 
+  it('should preserve model-level provider configuration in generated YAML', () => {
+    const config = generateConfig({
+      ...baseContext,
+      providers: [{ family: 'azure', models: ['azure:chat:gpt-4'] }],
+    });
+    const parsed = yaml.load(config) as Record<string, unknown>;
+
+    expect(parsed.providers).toEqual([
+      {
+        id: 'azure:chat:gpt-4',
+        config: {
+          apiHost: 'YOUR_RESOURCE.openai.azure.com',
+        },
+      },
+    ]);
+  });
+
   it('should include tests for compare use case', () => {
     const config = generateConfig({ ...baseContext, useCase: 'compare' });
     const parsed = yaml.load(config) as Record<string, unknown>;
@@ -221,6 +238,28 @@ describe('generateFiles', () => {
     expect(compareReadme?.content).toContain('Comparison');
     expect(ragReadme?.content).toContain('RAG');
     expect(agentReadme?.content).toContain('Agent');
+  });
+
+  it('should generate a Python provider stub for file-based Python providers', () => {
+    const files = generateFiles({
+      ...baseContext,
+      providers: [{ family: 'custom-python', models: ['file://provider.py'] }],
+    });
+
+    expect(files.find((file) => file.relativePath === 'provider.py')?.content).toContain(
+      'def call_api',
+    );
+  });
+
+  it('should generate a JavaScript provider stub for file-based JavaScript providers', () => {
+    const files = generateFiles({
+      ...baseContext,
+      providers: [{ family: 'custom-javascript', models: ['file://provider.js'] }],
+    });
+
+    expect(files.find((file) => file.relativePath === 'provider.js')?.content).toContain(
+      'module.exports = CustomApiProvider',
+    );
   });
 
   it('should generate redteam files for redteam use case', () => {

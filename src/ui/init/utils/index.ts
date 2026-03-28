@@ -3,7 +3,12 @@
  */
 
 export { generateConfig, generateFiles } from './configGenerator';
-export { downloadExample, fetchExampleList, getExampleDescription } from './exampleDownloader';
+export {
+  downloadExample,
+  fetchExampleList,
+  getExampleDescription,
+  resolveExampleTargetDirectory,
+} from './exampleDownloader';
 export {
   checkExistingFiles,
   isWritable,

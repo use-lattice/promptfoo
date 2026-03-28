@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDisplayPhase } from '../../../../src/ui/components/eval/EvalScreen';
+import { getDisplayPhase, getSummaryCounts } from '../../../../src/ui/components/eval/EvalScreen';
 
 describe('getDisplayPhase', () => {
   it('returns grading once provider work is done but comparison work remains', () => {
@@ -47,5 +47,31 @@ describe('getDisplayPhase', () => {
         providers: {},
       }),
     ).toBe('completed');
+  });
+});
+
+describe('getSummaryCounts', () => {
+  it('excludes comparison work from the pass denominator', () => {
+    expect(
+      getSummaryCounts({
+        passedTests: 2,
+        failedTests: 0,
+        errorCount: 0,
+        completedTests: 2,
+        totalTests: 3,
+        providers: {
+          'openai:gpt-4.1-mini#0': {
+            testCases: {
+              completed: 2,
+              total: 2,
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      evaluationTotal: 2,
+      comparisonCompleted: 0,
+      comparisonTotal: 1,
+    });
   });
 });

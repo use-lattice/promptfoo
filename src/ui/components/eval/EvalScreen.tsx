@@ -10,7 +10,7 @@ import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp } from 'ink';
 import { EVAL_COL_WIDTH, TIMING } from '../../constants';
 import { useEval, useEvalState } from '../../contexts/EvalContext';
-import { useKeypress } from '../../hooks/useKeypress';
+import { isRawModeSupported, useKeypress } from '../../hooks/useKeypress';
 import { useTerminalTitle } from '../../hooks/useTerminalTitle';
 import { useTokenMetrics } from '../../hooks/useTokenMetrics';
 import {
@@ -252,6 +252,44 @@ const ProviderRow = memo(
   },
 );
 
+type SummaryCountsState = {
+  passedTests: number;
+  failedTests: number;
+  errorCount: number;
+  totalTests: number;
+  completedTests: number;
+  providers: Record<string, { testCases: { completed: number; total: number } }>;
+};
+
+export function getSummaryCounts(state: SummaryCountsState): {
+  evaluationTotal: number;
+  comparisonCompleted: number;
+  comparisonTotal: number;
+} {
+  const providerTotals = Object.values(state.providers).reduce(
+    (totals, provider) => {
+      totals.completed += provider.testCases.completed;
+      totals.total += provider.testCases.total;
+      return totals;
+    },
+    { completed: 0, total: 0 },
+  );
+  const resultTotal = state.passedTests + state.failedTests + state.errorCount;
+  const evaluationTotal =
+    providerTotals.total > 0
+      ? providerTotals.total
+      : resultTotal > 0
+        ? resultTotal
+        : state.totalTests;
+  const comparisonTotal = Math.max(0, state.totalTests - evaluationTotal);
+  const comparisonCompleted =
+    comparisonTotal > 0
+      ? Math.min(comparisonTotal, Math.max(0, state.completedTests - evaluationTotal))
+      : 0;
+
+  return { evaluationTotal, comparisonCompleted, comparisonTotal };
+}
+
 /**
  * Compact summary line showing aggregate stats.
  */
@@ -261,6 +299,7 @@ function SummaryLine() {
     failedTests,
     errorCount,
     totalTests,
+    completedTests,
     totalTokens,
     promptTokens,
     completionTokens,
@@ -268,17 +307,26 @@ function SummaryLine() {
     totalCost,
     elapsedMs,
     logs,
+    providers,
     showVerbose,
   } = useEvalState();
 
   const tokenDisplay = totalTokens || promptTokens + completionTokens;
   const hasGradingTokens = gradingTokens.total > 0;
+  const { evaluationTotal, comparisonCompleted, comparisonTotal } = getSummaryCounts({
+    passedTests,
+    failedTests,
+    errorCount,
+    totalTests,
+    completedTests,
+    providers,
+  });
 
   // Count log warnings (warn level only, not errors since those are shown separately)
   const logWarningCount = logs.filter((log) => log.level === 'warn').length;
 
   let passColor: string;
-  if (passedTests === totalTests) {
+  if (evaluationTotal > 0 && passedTests === evaluationTotal) {
     passColor = 'green';
   } else if (failedTests > 0) {
     passColor = 'yellow';
@@ -290,12 +338,19 @@ function SummaryLine() {
     <Box marginTop={1}>
       {/* Pass count with color */}
       <Text color={passColor}>
-        {passedTests}/{totalTests} passed
+        {passedTests}/{evaluationTotal} passed
       </Text>
 
       {failedTests > 0 && <Text color="red"> · {failedTests} failed</Text>}
 
       {errorCount > 0 && <Text color="red"> · {errorCount} errors</Text>}
+
+      {comparisonTotal > 0 && (
+        <Text color="magenta">
+          {' '}
+          · Grading {comparisonCompleted}/{comparisonTotal}
+        </Text>
+      )}
 
       {/* Log warnings indicator - only show if not in verbose mode (verbose shows the panel) */}
       {logWarningCount > 0 && !showVerbose && (
@@ -481,7 +536,7 @@ export function EvalScreen({
   const { exit } = useApp();
   const { state, dispatch, isComplete, isRunning } = useEval();
   const completeCalled = useRef(false);
-  const isRawModeSupported = process.stdin.isTTY && typeof process.stdin.setRawMode === 'function';
+  const rawModeSupported = isRawModeSupported();
 
   // Stabilized timestamp for activity detection - only updates on TICK
   // This prevents spurious re-renders from other state changes (like spinner updates)
@@ -539,8 +594,14 @@ export function EvalScreen({
         return;
       }
     },
-    { isActive: isRawModeSupported && !inResultsPhase },
+    { isActive: rawModeSupported && !inResultsPhase },
   );
+
+  useEffect(() => {
+    if (inResultsPhase && showHelpOverlay) {
+      setShowHelpOverlay(false);
+    }
+  }, [inResultsPhase, showHelpOverlay]);
 
   // Update elapsed time while running (also triggers activity indicator refresh)
   useEffect(() => {
@@ -671,7 +732,7 @@ export function EvalScreen({
 
       {/* Help bar - only during active evaluation, hidden on completion to avoid
           confusion during transition to results table which has different shortcuts */}
-      {showHelp && isRawModeSupported && !isComplete && !showHelpOverlay && (
+      {showHelp && rawModeSupported && !isComplete && !showHelpOverlay && (
         <HelpBar
           showVerbose={state.showVerbose}
           hasErrors={state.errorCount > 0}
@@ -681,7 +742,7 @@ export function EvalScreen({
       )}
 
       {/* Help overlay - shown when user presses '?' */}
-      {showHelpOverlay && (
+      {showHelpOverlay && !inResultsPhase && (
         <EvalHelpOverlay
           onClose={() => setShowHelpOverlay(false)}
           hasErrors={state.errorCount > 0}

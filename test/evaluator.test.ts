@@ -2947,6 +2947,54 @@ describe('evaluator', () => {
     expect(events).toEqual(['start-begin', 'start-end', 'progress']);
   });
 
+  it('counts target-unavailable rows in prompt metrics before aborting the run', async () => {
+    const progressCallback = vi.fn();
+    let callCount = 0;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            output: 'ok',
+            tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+          };
+        }
+        return {
+          error: 'Unauthorized',
+          metadata: { http: { status: 401 } },
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Prompt A')],
+      tests: [{}, {}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {
+      progressCallback,
+      showProgressBar: false,
+    });
+
+    const metrics = evalRecord.prompts[0].metrics;
+    expect(metrics?.testPassCount).toBe(1);
+    expect(metrics?.testErrorCount).toBe(1);
+    const errorProgressCall = progressCallback.mock.calls.find(
+      (call) => call[5]?.outcome === 'error',
+    );
+    expect(errorProgressCall).toBeDefined();
+    expect(errorProgressCall?.[1]).toBe(2);
+    expect(errorProgressCall?.[4]).toEqual(
+      expect.objectContaining({
+        testErrorCount: 1,
+      }),
+    );
+  });
+
   it('should apply select-best to overall pass/fail and stats', async () => {
     // Mock matchesSelectBest to return deterministic results (first wins, second loses)
     const matchers = await import('../src/matchers');

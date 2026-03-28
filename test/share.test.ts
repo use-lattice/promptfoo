@@ -329,6 +329,25 @@ describe('createShareableUrl', () => {
     expect(result).toBe(`https://app.example.com/eval/mock-eval-id`);
   });
 
+  it('returns null without issuing requests when the share is aborted before upload starts', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+    const mockEval = buildMockEval();
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const result = await createShareableUrl(mockEval as Eval, {
+      abortSignal: abortController.signal,
+    });
+
+    expect(result).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');

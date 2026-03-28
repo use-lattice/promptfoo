@@ -84,13 +84,13 @@ function tableToYaml(table: EvaluateTable): string {
     }
     lines.push('    vars:');
     for (const v of row.vars) {
-      lines.push(`      - "${escapeYamlString(truncateForYaml(v))}"`);
+      lines.push(`      - "${escapeYamlString(v)}"`);
     }
     lines.push('    outputs:');
     for (const output of row.outputs) {
       lines.push(`      - pass: ${output.pass}`);
       lines.push(`        score: ${output.score}`);
-      lines.push(`        text: "${escapeYamlString(truncateForYaml(output.text ?? ''))}"`);
+      lines.push(`        text: "${escapeYamlString(output.text ?? '')}"`);
       if (output.error) {
         lines.push(`        error: "${escapeYamlString(output.error)}"`);
       }
@@ -112,16 +112,6 @@ function escapeYamlString(str: string): string {
     .replace(/\r/g, '\\r')
     .replace(/\t/g, '\\t')
     .replace(/\0/g, '\\0');
-}
-
-/**
- * Truncate long strings for YAML output.
- */
-function truncateForYaml(str: string, maxLength: number = 200): string {
-  if (str.length <= maxLength) {
-    return str;
-  }
-  return str.slice(0, maxLength - 3) + '...';
 }
 
 /**

@@ -90,6 +90,12 @@ export function parseFilterCommand(
 
   // Validate column — allow var:N for variable columns
   const isVarColumn = columnLower.startsWith('var:');
+  if (isVarColumn && !/^var:\d+$/i.test(columnLower)) {
+    return {
+      filter: null,
+      error: `Invalid variable column: ${column}. Use var:<index> (e.g., var:0)`,
+    };
+  }
   if (!isVarColumn && !FILTERABLE_COLUMNS.includes(columnLower)) {
     return {
       filter: null,

@@ -827,6 +827,9 @@ export const evalMachine = setup({
         PROGRESS: {
           actions: 'updateProgress',
         },
+        BATCH_PROGRESS: {
+          actions: 'processBatchProgress',
+        },
         UPDATE_TOKENS: {
           actions: 'updateTokens',
         },
@@ -865,6 +868,12 @@ export const evalMachine = setup({
           target: 'results',
           actions: 'setTableData',
         },
+        UPDATE_TOKENS: {
+          actions: 'updateTokens',
+        },
+        SET_GRADING_TOKENS: {
+          actions: 'setGradingTokens',
+        },
         TOGGLE_VERBOSE: {
           actions: 'toggleVerbose',
         },
@@ -888,6 +897,12 @@ export const evalMachine = setup({
 
     results: {
       on: {
+        UPDATE_TOKENS: {
+          actions: 'updateTokens',
+        },
+        SET_GRADING_TOKENS: {
+          actions: 'setGradingTokens',
+        },
         SHARING_STARTED: {
           actions: assign({ sharingStatus: 'sharing' as const }),
         },

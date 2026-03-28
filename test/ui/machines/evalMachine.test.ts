@@ -208,6 +208,36 @@ describe('evalMachine', () => {
       expect(ctx.currentPrompt).toBe('Prompt A');
       actor.stop();
     });
+
+    it('should continue processing batched progress while grading', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+      actor.send({ type: 'INIT', providers: ['gpt-4'], totalTests: 3 });
+      actor.send({ type: 'START' });
+      actor.send({ type: 'START_GRADING', completed: 2, total: 4 });
+      actor.send({
+        type: 'BATCH_PROGRESS',
+        items: [
+          {
+            provider: 'gpt-4',
+            providerTotal: 3,
+            passedDelta: 1,
+            failedDelta: 0,
+            errorDelta: 0,
+            latencyMs: 25,
+            cost: 0.001,
+            completed: 3,
+            total: 4,
+          },
+        ],
+      });
+
+      const ctx = actor.getSnapshot().context;
+      expect(ctx.completedTests).toBe(3);
+      expect(ctx.passedTests).toBe(1);
+      expect(ctx.providers['gpt-4'].testCases.completed).toBe(1);
+      actor.stop();
+    });
   });
 
   describe('COMPLETE event', () => {
@@ -368,6 +398,61 @@ describe('evalMachine', () => {
       expect(ctx.providers['gpt-4'].tokens.completion).toBe(50);
       expect(ctx.totalTokens).toBe(150);
       expect(ctx.totalRequests).toBe(5);
+      actor.stop();
+    });
+
+    it('should preserve late token updates after completion', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+      actor.send({ type: 'INIT', providers: ['gpt-4'], totalTests: 1 });
+      actor.send({ type: 'START' });
+      actor.send({ type: 'COMPLETE', passed: 1, failed: 0, errors: 0 });
+      actor.send({
+        type: 'UPDATE_TOKENS',
+        providerId: 'gpt-4',
+        tokens: {
+          prompt: 10,
+          completion: 5,
+          cached: 0,
+          total: 15,
+          numRequests: 1,
+          reasoning: 0,
+        },
+      });
+
+      const ctx = actor.getSnapshot().context;
+      expect(ctx.totalTokens).toBe(15);
+      expect(ctx.providers['gpt-4'].tokens.total).toBe(15);
+      actor.stop();
+    });
+  });
+
+  describe('SET_GRADING_TOKENS event', () => {
+    it('should preserve late grading token updates after showing results', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+      actor.send({ type: 'INIT', providers: ['gpt-4'], totalTests: 1 });
+      actor.send({ type: 'START' });
+      actor.send({ type: 'COMPLETE', passed: 1, failed: 0, errors: 0 });
+      actor.send({
+        type: 'SHOW_RESULTS',
+        tableData: { head: { prompts: [], vars: [] }, body: [] },
+      });
+      actor.send({
+        type: 'SET_GRADING_TOKENS',
+        providerId: 'gpt-4',
+        tokens: {
+          prompt: 6,
+          completion: 4,
+          cached: 0,
+          total: 10,
+          reasoning: 2,
+        },
+      });
+
+      const ctx = actor.getSnapshot().context;
+      expect(ctx.gradingTokens.total).toBe(10);
+      expect(ctx.providers['gpt-4'].gradingTokens.reasoning).toBe(2);
       actor.stop();
     });
   });

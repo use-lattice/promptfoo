@@ -251,6 +251,10 @@ export function DownloadComplete({
           3. <Text color="cyan">promptfoo eval</Text>
         </Text>
       </Box>
+
+      <Box>
+        <Text dimColor>Press any key to exit</Text>
+      </Box>
     </Box>
   );
 }

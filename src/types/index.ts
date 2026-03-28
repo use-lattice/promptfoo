@@ -215,6 +215,9 @@ export interface EvalProgressInfo {
   outcome?: 'pass' | 'fail' | 'error';
   providerTotal?: number;
   prompt?: string;
+  latencyMs?: number;
+  cost?: number;
+  assertionTokens?: TokenUsage;
 }
 
 export interface EvalPlanInfo {

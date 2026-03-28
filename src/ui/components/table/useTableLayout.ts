@@ -18,6 +18,22 @@ import type { CompletedPrompt, EvaluateTable, TableColumn, TableLayout } from '.
 /** Border/separator overhead per column: ' | ' */
 const BORDER_OVERHEAD = 3;
 
+function getMinimumRequiredWidth(
+  varCount: number,
+  outputCount: number,
+  showIndex: boolean,
+): number {
+  const columnCount = (showIndex ? 1 : 0) + varCount + outputCount;
+  const separatorCount = Math.max(0, columnCount - 1);
+
+  return (
+    (showIndex ? TABLE_LAYOUT.INDEX_WIDTH : 0) +
+    varCount * TABLE_LAYOUT.MIN_VAR_WIDTH +
+    outputCount * TABLE_LAYOUT.MIN_OUTPUT_WIDTH +
+    separatorCount * BORDER_OVERHEAD
+  );
+}
+
 /**
  * Calculate optimal column widths based on available space.
  */
@@ -152,8 +168,11 @@ export function useTableLayout(
   return useMemo(() => {
     const { head, body } = data;
 
-    // Check if terminal is too narrow for table mode
-    const isCompact = terminalWidth < TABLE_LAYOUT.MIN_TABLE_WIDTH;
+    const minimumWidth = Math.max(
+      TABLE_LAYOUT.MIN_TABLE_WIDTH,
+      getMinimumRequiredWidth(head.vars.length, head.prompts.length, showIndex),
+    );
+    const isCompact = terminalWidth < minimumWidth;
 
     // Calculate columns
     const columns = calculateColumnWidths(terminalWidth, head.vars, head.prompts, showIndex);
@@ -197,7 +216,11 @@ export function calculateTableLayout(
   const { showIndex = true, maxVisibleRows = LIMITS.MAX_VISIBLE_ROWS } = options;
   const { head, body } = data;
 
-  const isCompact = terminalWidth < TABLE_LAYOUT.MIN_TABLE_WIDTH;
+  const minimumWidth = Math.max(
+    TABLE_LAYOUT.MIN_TABLE_WIDTH,
+    getMinimumRequiredWidth(head.vars.length, head.prompts.length, showIndex),
+  );
+  const isCompact = terminalWidth < minimumWidth;
   const columns = calculateColumnWidths(terminalWidth, head.vars, head.prompts, showIndex);
 
   for (const col of columns) {

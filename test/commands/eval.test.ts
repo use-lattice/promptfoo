@@ -375,6 +375,78 @@ describe('evalCommand', () => {
     expect(cleanup).toHaveBeenCalled();
   });
 
+  it('should abort an in-flight Ink background share when the session exits', async () => {
+    const mockController = {
+      init: vi.fn(),
+      start: vi.fn(),
+      startGrading: vi.fn(),
+      progress: vi.fn(),
+      complete: vi.fn(),
+      error: vi.fn(),
+      setPhase: vi.fn(),
+      setShareUrl: vi.fn(),
+      setSharingStatus: vi.fn(),
+      setSessionPhase: vi.fn(),
+      showResults: vi.fn(),
+      addError: vi.fn(),
+      addLog: vi.fn(),
+      cleanup: vi.fn(),
+    };
+    const cleanup = vi.fn();
+    const config = { sharing: true } as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    vi.mocked(shouldUseInkUI).mockReturnValue(true);
+    vi.mocked(initInkEval).mockResolvedValue({
+      controller: mockController as any,
+      evaluateOptions: {
+        progressCallback: vi.fn(),
+        progressEventCallback: vi.fn(),
+      },
+      cleanup,
+      renderResult: {
+        waitUntilExit: vi.fn().mockResolvedValue(undefined),
+      } as any,
+    });
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_suite, _record, evaluateOptions: any) => {
+      await evaluateOptions.onPlan?.({
+        evalCount: 1,
+        comparisonCount: 0,
+        totalCount: 1,
+        providerTotals: {},
+        concurrency: 4,
+      });
+      return evalRecord;
+    });
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
+    vi.mocked(createShareableUrl).mockImplementation(
+      async (_eval, options?: { abortSignal?: AbortSignal }) =>
+        await new Promise<string | null>((resolve) => {
+          options?.abortSignal?.addEventListener('abort', () => resolve(null), { once: true });
+        }),
+    );
+
+    await doEval({ table: false }, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledTimes(1);
+    expect(createShareableUrl).toHaveBeenCalledWith(
+      expect.any(Eval),
+      expect.objectContaining({
+        silent: true,
+        abortSignal: expect.any(AbortSignal),
+      }),
+    );
+    expect(cleanup).toHaveBeenCalled();
+  });
+
   it('should not share when share is explicitly set to false even if config has sharing enabled', async () => {
     const cmdObj = { share: false };
     const config = { sharing: true } as UnifiedConfig;

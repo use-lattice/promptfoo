@@ -41,6 +41,50 @@ export interface DownloadResult {
   errors: Array<{ file: string; error: string }>;
 }
 
+function normalizeRepoRelativePath(candidate: string, description: string): string {
+  const normalized = path.posix.normalize(candidate.replace(/\\/g, '/'));
+  if (
+    !normalized ||
+    normalized === '.' ||
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    path.posix.isAbsolute(normalized)
+  ) {
+    throw new Error(`Invalid ${description}: ${candidate}`);
+  }
+  return normalized;
+}
+
+function getSafeExampleRelativePath(exampleName: string, remotePath: string): string | null {
+  const safeExampleName = normalizeRepoRelativePath(exampleName, 'example name');
+  const prefix = `examples/${safeExampleName}/`;
+  if (!remotePath.startsWith(prefix)) {
+    return null;
+  }
+
+  try {
+    return normalizeRepoRelativePath(remotePath.slice(prefix.length), 'example file path');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the target directory for an example download.
+ * Defaults to creating a dedicated ./<example> directory instead of writing into cwd.
+ */
+export function resolveExampleTargetDirectory(
+  outputDirectory: string | undefined,
+  exampleName: string,
+): string {
+  const safeExampleName = normalizeRepoRelativePath(exampleName, 'example name');
+  if (!outputDirectory || outputDirectory === '.') {
+    return path.resolve(process.cwd(), safeExampleName);
+  }
+
+  return path.resolve(process.cwd(), outputDirectory);
+}
+
 /**
  * Resolve the best available ref by trying each in order.
  */
@@ -107,8 +151,13 @@ export async function fetchExampleList(): Promise<string[]> {
       continue;
     }
     const exampleDir = path.posix.dirname(item.path).replace(/^examples\//, '');
-    if (exampleDir && exampleDir !== '.') {
-      examples.add(exampleDir);
+    if (!exampleDir || exampleDir === '.') {
+      continue;
+    }
+    try {
+      examples.add(normalizeRepoRelativePath(exampleDir, 'example name'));
+    } catch {
+      continue;
     }
   }
 
@@ -119,7 +168,8 @@ export async function fetchExampleList(): Promise<string[]> {
  * Get the list of files in an example directory from the cached tree.
  */
 function getExampleFilesFromTree(exampleName: string, tree: TreeEntry[]): string[] {
-  const prefix = `examples/${exampleName}/`;
+  const safeExampleName = normalizeRepoRelativePath(exampleName, 'example name');
+  const prefix = `examples/${safeExampleName}/`;
   return tree
     .filter((item) => item.type === 'blob' && item.path.startsWith(prefix))
     .map((item) => item.path);
@@ -167,9 +217,10 @@ export async function downloadExample(
 
   // Use cached tree (fetched once, reused across fetchExampleList + downloadExample)
   const { ref, tree } = await getTree();
+  const safeExampleName = normalizeRepoRelativePath(exampleName, 'example name');
 
   // Get list of files in the example from the cached tree
-  const files = getExampleFilesFromTree(exampleName, tree);
+  const files = getExampleFilesFromTree(safeExampleName, tree);
 
   if (files.length === 0) {
     result.success = false;
@@ -185,8 +236,12 @@ export async function downloadExample(
   // Download each file
   for (let i = 0; i < files.length; i++) {
     const remotePath = files[i];
-    // Remove the examples/exampleName prefix from the path
-    const relativePath = remotePath.replace(`examples/${exampleName}/`, '');
+    const relativePath = getSafeExampleRelativePath(safeExampleName, remotePath);
+    if (!relativePath) {
+      result.success = false;
+      result.errors.push({ file: remotePath, error: 'Invalid example file path' });
+      continue;
+    }
     const localPath = path.join(targetDirectory, relativePath);
 
     onProgress?.({

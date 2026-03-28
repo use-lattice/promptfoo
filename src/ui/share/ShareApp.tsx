@@ -4,7 +4,7 @@
  * Shows upload progress and provides the share URL.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import opener from 'opener';
@@ -61,7 +61,7 @@ export interface ShareAppProps {
   onController?: (controller: ShareController) => void;
 }
 
-type SetProgressFn = React.Dispatch<React.SetStateAction<ShareProgress>>;
+type SetProgressFn = Dispatch<SetStateAction<ShareProgress>>;
 
 export function ShareApp({
   evalId,
@@ -99,7 +99,7 @@ export function ShareApp({
       if (input === 'y' || input === 'Y' || key.return) {
         setProgress((prev) => ({ ...prev, phase: 'preparing' }));
         onConfirm?.();
-      } else if (input === 'n' || input === 'N' || key.escape) {
+      } else if (input === 'n' || input === 'N' || input === 'q' || key.escape) {
         onCancel?.();
         exit();
       }
@@ -276,7 +276,9 @@ export function ShareApp({
 
       {/* Footer */}
       <Box marginTop={1}>
-        {progress.phase === 'confirming' && <Text dimColor>Press y to confirm, n to cancel</Text>}
+        {progress.phase === 'confirming' && (
+          <Text dimColor>Press y or Enter to confirm, n, Esc, or q to cancel</Text>
+        )}
         {progress.phase === 'complete' && (
           <Box>
             <Text dimColor>Press </Text>
@@ -291,10 +293,12 @@ export function ShareApp({
             )}
             <Text dimColor> | </Text>
             <Text color="yellow">Enter</Text>
+            <Text dimColor> or </Text>
+            <Text color="yellow">q</Text>
             <Text dimColor> to exit</Text>
           </Box>
         )}
-        {progress.phase === 'error' && <Text dimColor>Press Enter to exit</Text>}
+        {progress.phase === 'error' && <Text dimColor>Press Enter, Esc, or q to exit</Text>}
         {['preparing', 'uploading', 'processing'].includes(progress.phase) && (
           <Text dimColor>Please wait...</Text>
         )}

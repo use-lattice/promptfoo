@@ -788,9 +788,9 @@ export function DetailsPanel({
         paddingTop={1}
       >
         <Text dimColor>
-          <Text color="cyan">[j/k]</Text> scroll <Text color="cyan">[Tab]</Text> section{' '}
+          <Text color="cyan">[↑/↓ or j/k]</Text> scroll <Text color="cyan">[Tab]</Text> section{' '}
           <Text color="cyan">[[/]]</Text> prev/next <Text color="cyan">[{'{/}'}]</Text> prev/next
-          fail <Text color="cyan">[y]</Text> copy <Text color="cyan">[q]</Text> close
+          fail <Text color="cyan">[y]</Text> copy <Text color="cyan">[Esc/q]</Text> close
         </Text>
       </Box>
     </Box>

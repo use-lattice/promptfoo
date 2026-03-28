@@ -114,6 +114,199 @@ describe('evalBridge', () => {
       });
     });
 
+    it('should accumulate grading tokens across prompts for the same provider', () => {
+      const provider = {
+        id: () => 'openai:gpt-4',
+        label: undefined,
+      };
+
+      const promptZero: RunEvalOptions = {
+        provider: provider as any,
+        prompt: { raw: 'Prompt 0' },
+        test: { vars: {} },
+        promptIdx: 0,
+      } as any;
+
+      const promptOne: RunEvalOptions = {
+        provider: provider as any,
+        prompt: { raw: 'Prompt 1' },
+        test: { vars: {} },
+        promptIdx: 1,
+      } as any;
+
+      controller.progress(
+        1,
+        3,
+        0,
+        promptZero,
+        {
+          testPassCount: 1,
+          testFailCount: 0,
+          testErrorCount: 0,
+          totalLatencyMs: 25,
+          cost: 0,
+          tokenUsage: {
+            assertions: {
+              total: 10,
+              prompt: 6,
+              completion: 4,
+              cached: 0,
+              completionDetails: { reasoning: 1 },
+            },
+          },
+        } as any,
+        { outcome: 'pass', providerTotal: 3 },
+      );
+
+      controller.progress(
+        2,
+        3,
+        1,
+        promptOne,
+        {
+          testPassCount: 1,
+          testFailCount: 0,
+          testErrorCount: 0,
+          totalLatencyMs: 30,
+          cost: 0,
+          tokenUsage: {
+            assertions: {
+              total: 4,
+              prompt: 2,
+              completion: 2,
+              cached: 0,
+              completionDetails: { reasoning: 0 },
+            },
+          },
+        } as any,
+        { outcome: 'pass', providerTotal: 3 },
+      );
+
+      const gradingActions = dispatch.mock.calls
+        .map(([action]) => action)
+        .filter((action) => action.type === 'SET_GRADING_TOKENS');
+
+      expect(gradingActions).toEqual([
+        {
+          type: 'SET_GRADING_TOKENS',
+          payload: {
+            providerId: 'openai:gpt-4',
+            tokens: {
+              total: 10,
+              prompt: 6,
+              completion: 4,
+              cached: 0,
+              reasoning: 1,
+            },
+          },
+        },
+        {
+          type: 'SET_GRADING_TOKENS',
+          payload: {
+            providerId: 'openai:gpt-4',
+            tokens: {
+              total: 14,
+              prompt: 8,
+              completion: 6,
+              cached: 0,
+              reasoning: 1,
+            },
+          },
+        },
+      ]);
+    });
+
+    it('prefers explicit per-result latency, cost, and grading tokens over inferred metric deltas', () => {
+      const provider = {
+        id: () => 'openai:gpt-4',
+        label: undefined,
+      };
+
+      const evalStep: RunEvalOptions = {
+        provider: provider as any,
+        prompt: { raw: 'Test prompt' },
+        test: { vars: {} },
+        promptIdx: 0,
+      } as any;
+
+      const sharedMetrics: PromptMetrics = {
+        testPassCount: 2,
+        testFailCount: 0,
+        testErrorCount: 0,
+        totalLatencyMs: 200,
+        cost: 0.03,
+      } as any;
+
+      controller.progress(1, 2, 0, evalStep, sharedMetrics, {
+        outcome: 'pass',
+        providerTotal: 2,
+        latencyMs: 125,
+        cost: 0.01,
+        assertionTokens: {
+          total: 4,
+          prompt: 2,
+          completion: 2,
+          cached: 0,
+          numRequests: 1,
+        } as any,
+      });
+      dispatch.mockClear();
+
+      controller.progress(2, 2, 1, evalStep, sharedMetrics, {
+        outcome: 'pass',
+        providerTotal: 2,
+        latencyMs: 75,
+        cost: 0.02,
+        assertionTokens: {
+          total: 3,
+          prompt: 1,
+          completion: 2,
+          cached: 0,
+          numRequests: 1,
+          completionDetails: { reasoning: 1 },
+        } as any,
+      });
+
+      const gradingAction = dispatch.mock.calls
+        .map(([action]) => action)
+        .find((action) => action.type === 'SET_GRADING_TOKENS');
+      expect(gradingAction).toEqual({
+        type: 'SET_GRADING_TOKENS',
+        payload: {
+          providerId: 'openai:gpt-4',
+          tokens: {
+            total: 7,
+            prompt: 3,
+            completion: 4,
+            cached: 0,
+            reasoning: 1,
+          },
+        },
+      });
+
+      vi.advanceTimersByTime(TIMING.BATCH_INTERVAL_MS);
+
+      const batchAction = dispatch.mock.calls
+        .map(([action]) => action)
+        .find((action) => action.type === 'BATCH_PROGRESS');
+      expect(batchAction).toEqual({
+        type: 'BATCH_PROGRESS',
+        payload: {
+          items: [
+            expect.objectContaining({
+              provider: 'openai:gpt-4',
+              providerTotal: 2,
+              outcome: 'pass',
+              latencyMs: 75,
+              cost: 0.02,
+              completed: 2,
+              total: 2,
+            }),
+          ],
+        },
+      });
+    });
+
     it('should queue subsequent progress items without immediate dispatch', () => {
       const provider = {
         id: () => 'openai:gpt-4',
@@ -613,6 +806,64 @@ describe('evalBridge', () => {
       expect(dispatch).toHaveBeenCalledWith({
         type: 'START_GRADING',
         payload: { completed: 3, total: 4 },
+      });
+    });
+
+    it('should flush any pending batched progress before grading starts', () => {
+      const provider = {
+        id: () => 'openai:gpt-4',
+        label: undefined,
+      };
+
+      const evalStep: RunEvalOptions = {
+        provider: provider as any,
+        prompt: { raw: 'Test prompt' },
+        test: { vars: {} },
+        promptIdx: 0,
+      } as any;
+
+      controller.progress(
+        1,
+        3,
+        0,
+        evalStep,
+        {
+          testPassCount: 1,
+          testFailCount: 0,
+          testErrorCount: 0,
+          totalLatencyMs: 10,
+          cost: 0,
+        } as any,
+        { outcome: 'pass', providerTotal: 3 },
+      );
+      dispatch.mockClear();
+
+      controller.progress(
+        2,
+        3,
+        1,
+        evalStep,
+        {
+          testPassCount: 2,
+          testFailCount: 0,
+          testErrorCount: 0,
+          totalLatencyMs: 20,
+          cost: 0,
+        } as any,
+        { outcome: 'pass', providerTotal: 3 },
+      );
+
+      controller.startGrading(2, 4);
+
+      expect(dispatch).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          type: 'BATCH_PROGRESS',
+        }),
+      );
+      expect(dispatch).toHaveBeenNthCalledWith(2, {
+        type: 'START_GRADING',
+        payload: { completed: 2, total: 4 },
       });
     });
 

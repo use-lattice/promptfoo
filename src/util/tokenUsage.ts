@@ -147,25 +147,33 @@ export class TokenUsageTracker {
    * Returns the raw ID if no label is registered.
    */
   public resolveLabel(rawId: string): string {
+    const normalized = rawId.match(/^(.+?)\s+\([^)]+\)$/)?.[1] ?? rawId;
+
     // Exact match (most common case)
-    if (this.labelMap.has(rawId)) {
-      return this.labelMap.get(rawId)!;
+    if (this.labelMap.has(normalized)) {
+      return this.labelMap.get(normalized)!;
     }
-    // Prefix matching: only match when the raw ID is a prefix of a map key
-    // (e.g., tracker reports "openai:gpt-4o-mini" and map has "openai:gpt-4o-mini").
-    // Use longest-match-wins to avoid "openai:gpt-4" matching before "openai:gpt-4o-mini".
-    let bestMatch: string | undefined;
-    let bestMatchLength = 0;
+
+    // Stable UI keys already include their run-specific suffix and should not be
+    // coerced onto a different provider row via fuzzy matching.
+    if (normalized.includes('#')) {
+      return normalized;
+    }
+
+    // Resolve to a keyed provider only when the raw ID uniquely identifies a
+    // single provider in the current run. Ambiguous raw IDs must stay raw.
+    const keyedMatches = new Set<string>();
     for (const [id, label] of this.labelMap) {
-      if (rawId.startsWith(id) && id.length > bestMatchLength) {
-        bestMatch = label;
-        bestMatchLength = id.length;
-      } else if (id.startsWith(rawId) && rawId.length > bestMatchLength) {
-        bestMatch = label;
-        bestMatchLength = rawId.length;
+      if (id.startsWith(`${normalized}#`)) {
+        keyedMatches.add(label);
       }
     }
-    return bestMatch ?? rawId;
+
+    if (keyedMatches.size === 1) {
+      return keyedMatches.values().next().value!;
+    }
+
+    return normalized;
   }
 
   /**

@@ -4,7 +4,7 @@
  * Shows login progress, team selection, and success/error states.
  */
 
-import { useEffect, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import { Spinner } from '../components/shared/Spinner';
@@ -53,25 +53,9 @@ export interface AuthAppProps {
   onController?: (controller: AuthController) => void;
 }
 
-type SetProgressFn = React.Dispatch<React.SetStateAction<AuthProgress>>;
+type SetProgressFn = Dispatch<SetStateAction<AuthProgress>>;
 
-function TeamSelector({
-  teams,
-  selectedIndex,
-  onSelect,
-}: {
-  teams: TeamInfo[];
-  selectedIndex: number;
-  onSelect: (index: number) => void;
-}) {
-  useInput((_input, key) => {
-    if (key.upArrow) {
-      onSelect(selectedIndex > 0 ? selectedIndex - 1 : teams.length - 1);
-    } else if (key.downArrow) {
-      onSelect(selectedIndex < teams.length - 1 ? selectedIndex + 1 : 0);
-    }
-  });
-
+function TeamSelector({ teams, selectedIndex }: { teams: TeamInfo[]; selectedIndex: number }) {
   return (
     <Box flexDirection="column">
       {teams.map((team, index) => {
@@ -103,15 +87,57 @@ export function AuthApp({
     phase: initialPhase,
     selectedTeamIndex: 0,
   });
+  const teamSelectionSubmittedRef = useRef(false);
+
+  useEffect(() => {
+    if (progress.phase === 'selecting_team') {
+      teamSelectionSubmittedRef.current = false;
+    }
+  }, [progress.phase]);
 
   // Handle keyboard input
   useInput((input, key) => {
     if (progress.phase === 'selecting_team' && progress.teams) {
+      if (teamSelectionSubmittedRef.current) {
+        return;
+      }
+      const teamCount = progress.teams.length;
+
+      if (key.upArrow || input === 'k') {
+        setProgress((prev) => ({
+          ...prev,
+          selectedTeamIndex:
+            (prev.selectedTeamIndex || 0) > 0 ? (prev.selectedTeamIndex || 0) - 1 : teamCount - 1,
+        }));
+        return;
+      }
+
+      if (key.downArrow || input === 'j') {
+        setProgress((prev) => ({
+          ...prev,
+          selectedTeamIndex:
+            (prev.selectedTeamIndex || 0) < teamCount - 1 ? (prev.selectedTeamIndex || 0) + 1 : 0,
+        }));
+        return;
+      }
+
       if (key.return) {
+        teamSelectionSubmittedRef.current = true;
         const selectedTeam = progress.teams[progress.selectedTeamIndex || 0];
+        setProgress((prev) => ({
+          ...prev,
+          phase: 'logging_in',
+          statusMessage: `Selecting ${selectedTeam.name}...`,
+        }));
         onTeamSelect?.(selectedTeam);
       } else if (key.escape) {
+        teamSelectionSubmittedRef.current = true;
         // Signal cancellation — caller uses getDefaultTeam() for the canonical default
+        setProgress((prev) => ({
+          ...prev,
+          phase: 'logging_in',
+          statusMessage: 'Using default team...',
+        }));
         onTeamSelect?.(undefined);
       }
       return;
@@ -168,11 +194,7 @@ export function AuthApp({
           <Box marginBottom={1}>
             <Text>{phaseMessages.selecting_team}</Text>
           </Box>
-          <TeamSelector
-            teams={progress.teams}
-            selectedIndex={progress.selectedTeamIndex || 0}
-            onSelect={(index) => setProgress((prev) => ({ ...prev, selectedTeamIndex: index }))}
-          />
+          <TeamSelector teams={progress.teams} selectedIndex={progress.selectedTeamIndex || 0} />
         </Box>
       )}
 
@@ -223,10 +245,10 @@ export function AuthApp({
       <Box marginTop={1}>
         {progress.phase === 'logging_in' && <Text dimColor>Please wait...</Text>}
         {progress.phase === 'selecting_team' && (
-          <Text dimColor>↑/↓ to navigate, Enter to select, Esc to use default</Text>
+          <Text dimColor>↑/↓ or j/k to navigate, Enter to select, Esc to use default</Text>
         )}
         {(progress.phase === 'success' || progress.phase === 'error') && (
-          <Text dimColor>Press Enter to exit</Text>
+          <Text dimColor>Press Enter, Esc, or q to exit</Text>
         )}
       </Box>
     </Box>

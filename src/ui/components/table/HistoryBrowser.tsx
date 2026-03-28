@@ -115,6 +115,8 @@ export const HistoryBrowser = memo(function HistoryBrowser({
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredEvals(evals);
+      setSelectedIndex(0);
+      setScrollOffset(0);
       return;
     }
 
@@ -219,6 +221,11 @@ export const HistoryBrowser = memo(function HistoryBrowser({
 
       // Navigate down
       if (key.downArrow || input === 'j') {
+        if (filteredEvals.length === 0) {
+          setSelectedIndex(0);
+          setScrollOffset(0);
+          return;
+        }
         setSelectedIndex((prev) => {
           const newIndex = Math.min(filteredEvals.length - 1, prev + 1);
           // Adjust scroll if needed
@@ -239,7 +246,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
 
       // Jump to bottom
       if (input === 'G') {
-        const lastIndex = filteredEvals.length - 1;
+        const lastIndex = Math.max(0, filteredEvals.length - 1);
         setSelectedIndex(lastIndex);
         setScrollOffset(Math.max(0, lastIndex - visibleRows + 1));
         return;
@@ -268,6 +275,9 @@ export const HistoryBrowser = memo(function HistoryBrowser({
 
       // Select
       if (key.return) {
+        if (filteredEvals.length === 0) {
+          return;
+        }
         void handleLoadEval();
         return;
       }
@@ -301,7 +311,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
         </Box>
         <Text color="red">{errorMessage}</Text>
         <Box marginTop={1}>
-          <Text dimColor>Press Esc to close</Text>
+          <Text dimColor>Press Esc or q to close</Text>
         </Box>
       </Box>
     );
@@ -328,7 +338,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
         </Box>
         <Text dimColor>No evaluations found</Text>
         <Box marginTop={1}>
-          <Text dimColor>Press Esc to close</Text>
+          <Text dimColor>Press Esc or q to close</Text>
         </Box>
       </Box>
     );
@@ -347,7 +357,9 @@ export const HistoryBrowser = memo(function HistoryBrowser({
           <Text dimColor>No matches for "{searchQuery}"</Text>
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>Press Esc to clear search</Text>
+          <Text dimColor>
+            {isSearching ? 'Enter applies search; Esc clears it' : 'Esc clears search; q closes'}
+          </Text>
         </Box>
       </Box>
     );

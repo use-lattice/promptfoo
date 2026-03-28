@@ -5,7 +5,7 @@
  * efficient, real-time token usage updates in the UI.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { type Dispatch, useCallback, useEffect, useRef } from 'react';
 
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TIMING } from '../constants';
@@ -59,7 +59,7 @@ function resolveProviderId(trackerId: string): string {
  * @param dispatch - The dispatch function from EvalContext
  * @param isRunning - Whether the evaluation is currently running
  */
-export function useTokenMetrics(dispatch: React.Dispatch<EvalAction>, isRunning: boolean): void {
+export function useTokenMetrics(dispatch: Dispatch<EvalAction>, isRunning: boolean): void {
   // Pending updates to batch
   const pendingUpdates = useRef<Map<string, TokenUsage>>(new Map());
   // Debounce timer

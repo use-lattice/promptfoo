@@ -31,6 +31,8 @@ export interface ShareOptions {
   silent?: boolean;
   /** Show authentication info in the URL */
   showAuth?: boolean;
+  /** Abort an in-flight share request */
+  abortSignal?: AbortSignal;
 }
 
 /** Error types that indicate chunk size issues */
@@ -47,6 +49,28 @@ interface ChunkSendResult {
 interface AdaptiveChunkConfig {
   minResultsPerChunk: number;
   maxResultsPerChunk: number;
+}
+
+function createAbortError(): Error {
+  const error = new Error('The operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof Error && error.name === 'AbortError') ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      (error as { name?: string }).name === 'AbortError')
+  );
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
 }
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
@@ -125,7 +149,10 @@ async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
+  abortSignal?: AbortSignal,
 ): Promise<string> {
+  throwIfAborted(abortSignal);
+
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
 
@@ -160,6 +187,7 @@ async function sendEvalRecord(
     headers,
     body: jsonData,
     compress: true,
+    signal: abortSignal,
   });
 
   if (!response.ok) {
@@ -197,7 +225,9 @@ async function sendChunkOfResults(
   url: string,
   evalId: string,
   headers: Record<string, string>,
+  abortSignal?: AbortSignal,
 ): Promise<ChunkSendResult> {
+  throwIfAborted(abortSignal);
   const targetUrl = `${url}/${evalId}/results`;
   const stringifiedChunk = JSON.stringify(chunk);
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
@@ -212,6 +242,7 @@ async function sendChunkOfResults(
       headers,
       body: stringifiedChunk,
       compress: true,
+      signal: abortSignal,
     });
 
     if (!response.ok) {
@@ -250,6 +281,9 @@ async function sendChunkOfResults(
 
     return { success: true };
   } catch (error) {
+    if (abortSignal?.aborted || isAbortError(error)) {
+      throw createAbortError();
+    }
     // Network-level failures (timeout, connection reset, etc.)
     if (error instanceof TypeError && error.message === 'fetch failed') {
       logger.debug(`Network timeout/failure for chunk of ${chunk.length} results`);
@@ -279,9 +313,11 @@ async function sendChunkWithRetry(
   headers: Record<string, string>,
   config: AdaptiveChunkConfig,
   onProgress: (sentCount: number) => void,
+  abortSignal?: AbortSignal,
   depth: number = 0,
   maxDepth?: number,
 ): Promise<number> {
+  throwIfAborted(abortSignal);
   // Compute max depth based on chunk size if not provided (allows splitting until minResultsPerChunk)
   const effectiveMaxDepth =
     maxDepth ?? Math.ceil(Math.log2(chunk.length / config.minResultsPerChunk)) + 1;
@@ -294,7 +330,7 @@ async function sendChunkWithRetry(
     return 0;
   }
 
-  const result = await sendChunkOfResults(chunk, url, evalId, headers);
+  const result = await sendChunkOfResults(chunk, url, evalId, headers, abortSignal);
 
   if (result.success) {
     onProgress(chunk.length);
@@ -328,6 +364,7 @@ async function sendChunkWithRetry(
       headers,
       config,
       onProgress,
+      abortSignal,
       depth + 1,
       effectiveMaxDepth,
     );
@@ -338,6 +375,7 @@ async function sendChunkWithRetry(
       headers,
       config,
       onProgress,
+      abortSignal,
       depth + 1,
       effectiveMaxDepth,
     );
@@ -372,75 +410,81 @@ async function sendChunkedResults(
   options: ShareOptions = {},
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
-  const { silent = false } = options;
+  const { silent = false, abortSignal } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
-
-  await checkCloudPermissions(evalRecord.config);
-
-  const inlineBlobs =
-    isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
-  const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
-
-  let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
-  if (sampleResults.length === 0) {
-    logger.debug(`No results found`);
-    return null;
-  }
-  if (inlineBlobs && inlineCache) {
-    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
-  }
-  logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
-
-  // Calculate chunk sizes based on sample
-  const largestSize = findLargestResultSize(sampleResults);
-  logger.debug(`Largest result size from sample: ${largestSize} bytes`);
-
-  // Determine how many results per chunk
-  const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
-  const envChunkSize = getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE');
-  const calculatedChunkSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
-  // Validate env chunk size - must be a positive integer, otherwise fall back to calculated
-  const resultsPerChunk =
-    typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
-
-  // Adaptive chunk configuration for retry logic
-  const chunkConfig: AdaptiveChunkConfig = {
-    minResultsPerChunk: 1,
-    maxResultsPerChunk: resultsPerChunk,
-  };
-
-  logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
-
-  // Prepare headers
-  const headers: Record<string, string> = {
+  let inlineCache: ReturnType<typeof createBlobInlineCache> | null = null;
+  let headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
-
-  // Use total row count (not distinct test count) since we iterate over all result rows
-  const totalResults = await evalRecord.getTotalResultRowCount();
-  logger.debug(`Total results to share: ${totalResults}`);
-
-  // Setup progress bar only if not in verbose mode, CI, Ink UI mode, or silent mode
-  const isInkUI = Boolean(cliState.inkUI);
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose && !isCI() && !isInkUI && !silent) {
-    progressBar = new cliProgress.SingleBar(
-      {
-        format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
-        gracefulExit: true,
-      },
-      cliProgress.Presets.shades_classic,
-    );
-    progressBar.start(totalResults, 0);
-  }
-
   let evalId: string | undefined;
   try {
+    throwIfAborted(abortSignal);
+
+    await checkCloudPermissions(evalRecord.config);
+
+    const inlineBlobs =
+      isBlobStorageEnabled() &&
+      getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
+    inlineCache = inlineBlobs ? createBlobInlineCache() : null;
+
+    let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+    if (sampleResults.length === 0) {
+      logger.debug(`No results found`);
+      return null;
+    }
+    if (inlineBlobs && inlineCache) {
+      sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
+    }
+    logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
+
+    // Calculate chunk sizes based on sample
+    const largestSize = findLargestResultSize(sampleResults);
+    logger.debug(`Largest result size from sample: ${largestSize} bytes`);
+
+    // Determine how many results per chunk
+    const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
+    const envChunkSize = getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE');
+    const calculatedChunkSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
+    // Validate env chunk size - must be a positive integer, otherwise fall back to calculated
+    const resultsPerChunk =
+      typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
+
+    // Adaptive chunk configuration for retry logic
+    const chunkConfig: AdaptiveChunkConfig = {
+      minResultsPerChunk: 1,
+      maxResultsPerChunk: resultsPerChunk,
+    };
+
+    logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
+
+    // Prepare headers
+    headers = {
+      'Content-Type': 'application/json',
+    };
+    if (cloudConfig.isEnabled()) {
+      headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+    }
+
+    // Use total row count (not distinct test count) since we iterate over all result rows
+    const totalResults = await evalRecord.getTotalResultRowCount();
+    logger.debug(`Total results to share: ${totalResults}`);
+
+    // Setup progress bar only if not in verbose mode, CI, Ink UI mode, or silent mode
+    const isInkUI = Boolean(cliState.inkUI);
+    if (!isVerbose && !isCI() && !isInkUI && !silent) {
+      progressBar = new cliProgress.SingleBar(
+        {
+          format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
+          gracefulExit: true,
+        },
+        cliProgress.Presets.shades_classic,
+      );
+      progressBar.start(totalResults, 0);
+    }
+
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers, abortSignal);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -461,6 +505,7 @@ async function sendChunkedResults(
     let chunkNumber = 0;
 
     for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
+      throwIfAborted(abortSignal);
       for (const result of batch) {
         currentChunk.push(result);
         if (currentChunk.length >= resultsPerChunk) {
@@ -471,7 +516,15 @@ async function sendChunkedResults(
             inlineBlobs && inlineCache
               ? await inlineBlobRefsForShare(currentChunk, inlineCache)
               : currentChunk;
-          await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
+          await sendChunkWithRetry(
+            chunkToSend,
+            url,
+            evalId,
+            headers,
+            chunkConfig,
+            onProgress,
+            abortSignal,
+          );
           currentChunk = [];
         }
       }
@@ -487,7 +540,15 @@ async function sendChunkedResults(
           ? await inlineBlobRefsForShare(currentChunk, inlineCache)
           : currentChunk;
 
-      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
+      await sendChunkWithRetry(
+        chunkToSend,
+        url,
+        evalId,
+        headers,
+        chunkConfig,
+        onProgress,
+        abortSignal,
+      );
     }
 
     logger.debug(
@@ -500,10 +561,17 @@ async function sendChunkedResults(
       progressBar.stop();
     }
 
-    logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+    const aborted = abortSignal?.aborted || isAbortError(e);
+    if (aborted) {
+      logger.debug('Share upload aborted');
+    } else {
+      logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
 
     if (evalId) {
-      logger.info(`Upload failed, rolling back...`);
+      if (!aborted) {
+        logger.info('Upload failed, rolling back...');
+      }
       await rollbackEval(url, evalId, headers);
     }
     return null;
@@ -611,11 +679,16 @@ export async function createShareableUrl(
   evalRecord: Eval,
   options: ShareOptions = {},
 ): Promise<string | null> {
-  const { silent = false, showAuth = false } = options;
+  const { silent = false, showAuth = false, abortSignal } = options;
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     logger.debug('Sharing is explicitly disabled, returning null');
+    return null;
+  }
+
+  if (abortSignal?.aborted) {
+    logger.debug('Share creation aborted before upload started');
     return null;
   }
 
@@ -644,7 +717,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, { silent });
+  const evalId = await sendChunkedResults(evalRecord, url, { silent, abortSignal });
 
   if (!evalId) {
     return null;

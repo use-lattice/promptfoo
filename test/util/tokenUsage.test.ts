@@ -224,4 +224,15 @@ describe('TokenUsageTracker', () => {
     expect(tracker.resolveLabel('echo#0 (EchoProvider)')).toBe('echo#0');
     expect(tracker.resolveLabel('echo#1 (EchoProvider)')).toBe('echo#1');
   });
+
+  it('should leave ambiguous raw provider ids unresolved', () => {
+    tracker.setLabelMap(
+      new Map([
+        ['echo#0', 'echo#0'],
+        ['echo#1', 'echo#1'],
+      ]),
+    );
+
+    expect(tracker.resolveLabel('echo')).toBe('echo');
+  });
 });

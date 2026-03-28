@@ -4,11 +4,11 @@
  * Navigation (shown in help - universally understood):
  * - ↑↓←→: Move up/down/left/right
  * - PageUp/PageDown: Full page navigation
- * - Home/End: Jump to first/last row
+ * - g/G or Home/End: Jump to first/last row
+ * - 0/$ or Ctrl+a/e: Jump to first/last column
  *
  * Navigation (hidden - for vim/less power users):
  * - hjkl: Same as arrow keys
- * - g/G: Jump to first/last row
  * - Ctrl+d/u: Half page down/up
  *
  * Cell interaction:
@@ -561,7 +561,7 @@ export function useTableNavigation({
   // Keyboard handling
   useKeypress(
     (keyInfo) => {
-      const { name, key, shift, ctrl, meta } = keyInfo;
+      const { name, key, ctrl, meta } = keyInfo;
       const currentState = stateRef.current;
 
       // When a cell is expanded, the overlay component handles all keyboard input
@@ -702,6 +702,12 @@ export function useTableNavigation({
           case 'u':
             dispatch({ type: 'HALF_PAGE_UP' });
             return;
+          case 'a':
+            dispatch({ type: 'GO_FIRST_COL' });
+            return;
+          case 'e':
+            dispatch({ type: 'GO_LAST_COL' });
+            return;
         }
       }
 
@@ -715,8 +721,8 @@ export function useTableNavigation({
           dispatch({ type: 'MOVE_UP' });
           break;
         case 'h':
-          // H (shift+h) = open history browser
-          if (shift) {
+          // Uppercase H = open history browser
+          if (key === 'H') {
             onHistory?.();
           } else {
             dispatch({ type: 'MOVE_LEFT' });
@@ -726,12 +732,18 @@ export function useTableNavigation({
           dispatch({ type: 'MOVE_RIGHT' });
           break;
         case 'g':
-          // g = first row, G (shift+g) = last row
-          if (shift) {
+          // g = first row, G = last row
+          if (key === 'G') {
             dispatch({ type: 'GO_LAST' });
           } else {
             dispatch({ type: 'GO_FIRST' });
           }
+          break;
+        case '0':
+          dispatch({ type: 'GO_FIRST_COL' });
+          break;
+        case '$':
+          dispatch({ type: 'GO_LAST_COL' });
           break;
 
         // Quit
