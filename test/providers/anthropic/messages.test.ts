@@ -736,7 +736,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.output).toBe('Quick response without thinking');
     });
 
-    it('should respect explicit temperature when thinking is enabled', async () => {
+    it('should omit explicit temperature when thinking is enabled', async () => {
       const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
           thinking: {
@@ -752,25 +752,53 @@ describe('AnthropicMessagesProvider', () => {
       } as Anthropic.Messages.Message);
 
       await provider.callApi('Test prompt');
-      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
-        {
-          model: 'claude-3-7-sonnet-20250219',
-          max_tokens: 2048,
-          messages: [
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      // Anthropic docs: temperature is incompatible with extended thinking
+      expect(callArgs).not.toHaveProperty('temperature');
+      expect(callArgs).toHaveProperty('thinking');
+    });
+
+    it('should clamp top_p to [0.95, 1.0] when thinking is enabled', async () => {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          top_p: 0.5,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      expect(callArgs).toMatchObject({ top_p: 0.95 });
+      expect(callArgs).not.toHaveProperty('temperature');
+    });
+
+    it('should suppress forced tool_choice when thinking is enabled', async () => {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          tool_choice: 'required' as any,
+          tools: [
             {
-              role: 'user',
-              content: [{ type: 'text', text: 'Test prompt' }],
+              name: 'test_tool',
+              description: 'A test tool',
+              input_schema: { type: 'object' as const, properties: {} },
             },
           ],
-          stream: false,
-          temperature: 0.7,
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2048,
-          },
         },
-        {},
-      );
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      // Forced tool use (type: 'any' from 'required') is incompatible with thinking
+      expect(callArgs).not.toHaveProperty('tool_choice');
     });
 
     it('should include beta features header when specified', async () => {

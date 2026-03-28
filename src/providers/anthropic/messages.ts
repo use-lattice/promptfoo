@@ -191,42 +191,74 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       context?.vars,
     );
 
+    const isThinking = !!(config.thinking || thinking);
+
+    // Validate and warn about thinking-incompatible params
+    if (isThinking) {
+      if (config.top_k != null) {
+        logger.warn(
+          'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
+        );
+      }
+      if (config.temperature != null) {
+        logger.warn(
+          'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
+        );
+      }
+      if (config.top_p != null && (config.top_p < 0.95 || config.top_p > 1.0)) {
+        logger.warn(
+          `top_p must be between 0.95 and 1.0 with extended thinking (got ${config.top_p}). Clamping to valid range.`,
+        );
+      }
+    }
+
+    // Resolve tool_choice, suppressing forced tool use when thinking is enabled
+    let resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
+    if (config.tool_choice) {
+      const transformed = transformToolChoice(
+        config.tool_choice,
+        'anthropic',
+      ) as Anthropic.Messages.ToolChoice;
+      if (isThinking && transformed.type !== 'auto') {
+        logger.warn(
+          `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
+        );
+      } else {
+        resolvedToolChoice = transformed;
+      }
+    }
+
+    // Resolve top_p: clamp to [0.95, 1.0] when thinking is enabled
+    let resolvedTopP: number | undefined;
+    if (config.top_p != null) {
+      resolvedTopP = isThinking ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
+    }
+
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
-      max_tokens:
-        config?.max_tokens ||
-        getEnvInt('ANTHROPIC_MAX_TOKENS', config.thinking || thinking ? 2048 : 1024),
+      max_tokens: config?.max_tokens || getEnvInt('ANTHROPIC_MAX_TOKENS', isThinking ? 2048 : 1024),
       messages: extractedMessages,
       stream: shouldStream,
-      // Anthropic does not allow temperature with top_p — omit default temperature when top_p is set
-      ...(config.top_p != null && config.temperature == null
+      // Anthropic: temperature is incompatible with both top_p and extended thinking
+      ...(resolvedTopP != null || isThinking
         ? {}
         : {
             temperature:
-              config.thinking || thinking
-                ? config.temperature
-                : (config.temperature ??
-                  parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
-                  getEnvFloat('ANTHROPIC_TEMPERATURE', 0)),
+              config.temperature ??
+              parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
+              getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
           }),
-      ...(config.top_p == null ? {} : { top_p: config.top_p }),
+      ...(resolvedTopP == null ? {} : { top_p: resolvedTopP }),
       // Anthropic docs: top_k is incompatible with extended thinking
-      ...(config.top_k == null || config.thinking || thinking ? {} : { top_k: config.top_k }),
+      ...(config.top_k == null || isThinking ? {} : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
       ...(config.stop_sequences?.length ? { stop_sequences: config.stop_sequences } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
-      ...(config.tool_choice
-        ? {
-            tool_choice: transformToolChoice(
-              config.tool_choice,
-              'anthropic',
-            ) as Anthropic.Messages.ToolChoice,
-          }
-        : {}),
-      ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
+      ...(resolvedToolChoice ? { tool_choice: resolvedToolChoice } : {}),
+      ...(isThinking ? { thinking: config.thinking || thinking } : {}),
       ...(processedOutputFormat || config.effort
         ? {
             output_config: {
@@ -237,10 +269,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
-
-    if ((config.thinking || thinking) && config.top_k != null) {
-      logger.warn('top_k is incompatible with extended thinking and will be ignored');
-    }
 
     logger.debug('Calling Anthropic Messages API', { params });
 
