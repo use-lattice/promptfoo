@@ -110,13 +110,20 @@ export function getModerationCacheKey(
   const cacheConfig = {
     endpoint: config.endpoint,
     apiVersion: config.apiVersion,
-    headersHash: config.headers
-      ? crypto
-          .createHash('sha256')
-          .update(JSON.stringify(config.headers))
-          .digest('hex')
-          .slice(0, 16)
-      : undefined,
+    headersHash:
+      config.headers && Object.keys(config.headers).length > 0
+        ? crypto
+            .createHash('sha256')
+            .update(
+              JSON.stringify(
+                Object.keys(config.headers)
+                  .sort()
+                  .map((k) => [k, config.headers![k]]),
+              ),
+            )
+            .digest('hex')
+            .slice(0, 16)
+        : undefined,
     blocklistNames: config.blocklistNames || [],
     haltOnBlocklistHit: config.haltOnBlocklistHit ?? false,
     passthrough: config.passthrough || {},

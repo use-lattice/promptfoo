@@ -258,6 +258,22 @@ describe('Azure Moderation', () => {
       expect(secondKey).not.toContain('secret-token-2');
       expect(firstKey).toContain('headersHash');
     });
+
+    it('should treat empty headers the same as absent headers', () => {
+      const noHeaders = getModerationCacheKey('model', {}, 'content');
+      const emptyHeaders = getModerationCacheKey('model', { headers: {} }, 'content');
+      const undefinedHeaders = getModerationCacheKey('model', { headers: undefined }, 'content');
+
+      expect(noHeaders).toBe(emptyHeaders);
+      expect(noHeaders).toBe(undefinedHeaders);
+    });
+
+    it('should produce the same hash regardless of header key order', () => {
+      const key1 = getModerationCacheKey('model', { headers: { A: '1', B: '2' } }, 'content');
+      const key2 = getModerationCacheKey('model', { headers: { B: '2', A: '1' } }, 'content');
+
+      expect(key1).toBe(key2);
+    });
   });
 
   describe('AzureModerationProvider', () => {
