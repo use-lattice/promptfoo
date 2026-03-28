@@ -100,8 +100,18 @@ export function handleApiError(err: any, data?: any): ProviderModerationResponse
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
-export function getModerationCacheKey(modelName: string, _config: any, content: string): string {
-  return `azure-moderation:${modelName}:${JSON.stringify(content)}`;
+export function getModerationCacheKey(
+  modelName: string,
+  config: AzureModerationConfig,
+  content: string,
+): string {
+  const cacheConfig = {
+    blocklistNames: config.blocklistNames || [],
+    haltOnBlocklistHit: config.haltOnBlocklistHit ?? false,
+    passthrough: config.passthrough || {},
+  };
+
+  return `azure-moderation:${modelName}:${JSON.stringify(cacheConfig)}:${JSON.stringify(content)}`;
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {

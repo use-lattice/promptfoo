@@ -174,23 +174,50 @@ describe('Azure Moderation', () => {
 
       const key = getModerationCacheKey(modelName, config, content);
 
-      expect(key).toBe('azure-moderation:test-model:"test content"');
+      expect(key).toBe(
+        'azure-moderation:test-model:{"blocklistNames":[],"haltOnBlocklistHit":false,"passthrough":{}}:"test content"',
+      );
     });
 
     it('should handle empty content', () => {
       const key = getModerationCacheKey('model', {}, '');
-      expect(key).toBe('azure-moderation:model:""');
+      expect(key).toBe(
+        'azure-moderation:model:{"blocklistNames":[],"haltOnBlocklistHit":false,"passthrough":{}}:""',
+      );
     });
 
-    it('should handle complex config object', () => {
-      const config = {
+    it('should include request-shaping config in the cache key', () => {
+      const key = getModerationCacheKey(
+        'model',
+        {
+          blocklistNames: ['custom-list'],
+          haltOnBlocklistHit: true,
+          passthrough: { outputType: 'EightSeverityLevels' },
+        },
+        'content',
+      );
+
+      expect(key).toBe(
+        'azure-moderation:model:{"blocklistNames":["custom-list"],"haltOnBlocklistHit":true,"passthrough":{"outputType":"EightSeverityLevels"}}:"content"',
+      );
+    });
+
+    it('should ignore auth-only config in the cache key', () => {
+      const firstConfig = {
         apiKey: 'key',
         endpoint: 'https://test.com',
         headers: { 'X-Test': 'value' },
       };
+      const secondConfig = {
+        apiKey: 'different-key',
+        endpoint: 'https://different.com',
+        headers: { 'X-Test': 'different-value' },
+      };
 
-      const key = getModerationCacheKey('model', config, 'content');
-      expect(key).toBe('azure-moderation:model:"content"');
+      const firstKey = getModerationCacheKey('model', firstConfig, 'content');
+      const secondKey = getModerationCacheKey('model', secondConfig, 'content');
+
+      expect(firstKey).toBe(secondKey);
     });
   });
 
