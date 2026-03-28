@@ -211,7 +211,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
                   getEnvFloat('ANTHROPIC_TEMPERATURE', 0)),
           }),
       ...(config.top_p == null ? {} : { top_p: config.top_p }),
-      ...(config.top_k == null ? {} : { top_k: config.top_k }),
+      // Anthropic docs: top_k is incompatible with extended thinking
+      ...(config.top_k == null || config.thinking || thinking ? {} : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
       ...(config.stop_sequences?.length ? { stop_sequences: config.stop_sequences } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
@@ -235,6 +236,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
+
+    // Warn about incompatible params with extended thinking
+    if (config.thinking || thinking) {
+      if (config.top_k != null) {
+        logger.warn('top_k is incompatible with extended thinking and will be ignored');
+      }
+    }
 
     logger.debug('Calling Anthropic Messages API', { params });
 
@@ -288,6 +296,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               config,
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
+              parsedCachedResponse.usage?.cache_read_input_tokens ?? undefined,
+              parsedCachedResponse.usage?.cache_creation_input_tokens ?? undefined,
             ),
             cached: true,
           };
@@ -341,6 +351,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             config,
             finalMessage.usage?.input_tokens,
             finalMessage.usage?.output_tokens,
+            (finalMessage.usage as any)?.cache_read_input_tokens,
+            (finalMessage.usage as any)?.cache_creation_input_tokens,
           ),
         };
       } else {
@@ -379,6 +391,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             config,
             response.usage?.input_tokens,
             response.usage?.output_tokens,
+            (response.usage as any)?.cache_read_input_tokens,
+            (response.usage as any)?.cache_creation_input_tokens,
           ),
         };
       }

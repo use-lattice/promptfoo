@@ -262,7 +262,18 @@ export function calculateAnthropicCost(
   config: any,
   promptTokens?: number,
   completionTokens?: number,
+  cacheReadTokens?: number,
+  cacheCreationTokens?: number,
 ): number | undefined {
+  if (config.cost != null) {
+    return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  }
+
+  // Determine effective input token count for tiered pricing threshold.
+  // Anthropic docs: the >200k threshold considers input + cache read + cache creation tokens.
+  const effectiveInputTokens =
+    (promptTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
+
   // Claude Sonnet models with 1M context support have tiered pricing based on prompt size
   const hasTieredPricing = [
     'claude-sonnet-4-5-20250929',
@@ -278,13 +289,46 @@ export function calculateAnthropicCost(
     typeof promptTokens !== 'undefined' &&
     typeof completionTokens !== 'undefined'
   ) {
-    // Tiered pricing for Claude Sonnet 4.5+:
-    // - If prompt > 200k tokens: $6/MTok input, $22.50/MTok output
-    // - Otherwise: $3/MTok input, $15/MTok output
-    const inputCost = config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
-    const outputCost = config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
+    const isLongContext = effectiveInputTokens > 200_000;
+    const baseInputRate = isLongContext ? 6 / 1e6 : 3 / 1e6;
+    const outputRate = isLongContext ? 22.5 / 1e6 : 15 / 1e6;
 
-    return inputCost * promptTokens + outputCost * completionTokens;
+    // Anthropic cache pricing: reads are 10% of base, writes are 25% of base
+    const cacheReadRate = baseInputRate * 0.1;
+    const cacheWriteRate = baseInputRate * 1.25;
+
+    // promptTokens from the API is the non-cached input portion
+    const uncachedInputTokens = promptTokens - (cacheReadTokens ?? 0) - (cacheCreationTokens ?? 0);
+    const inputCost =
+      Math.max(0, uncachedInputTokens) * baseInputRate +
+      (cacheReadTokens ?? 0) * cacheReadRate +
+      (cacheCreationTokens ?? 0) * cacheWriteRate;
+
+    return inputCost + (completionTokens ?? 0) * outputRate;
+  }
+
+  // For non-tiered models, still apply cache pricing if cache tokens are present
+  const modelInfo = ANTHROPIC_MODELS.find((m) => m.id === modelName);
+  if (
+    modelInfo &&
+    (cacheReadTokens || cacheCreationTokens) &&
+    Number.isFinite(promptTokens) &&
+    Number.isFinite(completionTokens) &&
+    typeof promptTokens !== 'undefined' &&
+    typeof completionTokens !== 'undefined'
+  ) {
+    const baseInputRate = modelInfo.cost.input;
+    const outputRate = modelInfo.cost.output;
+    const cacheReadRate = baseInputRate * 0.1;
+    const cacheWriteRate = baseInputRate * 1.25;
+
+    const uncachedInputTokens = promptTokens - (cacheReadTokens ?? 0) - (cacheCreationTokens ?? 0);
+    const inputCost =
+      Math.max(0, uncachedInputTokens) * baseInputRate +
+      (cacheReadTokens ?? 0) * cacheReadRate +
+      (cacheCreationTokens ?? 0) * cacheWriteRate;
+
+    return inputCost + completionTokens * outputRate;
   }
 
   return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);

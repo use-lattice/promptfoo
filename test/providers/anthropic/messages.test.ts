@@ -322,6 +322,27 @@ describe('AnthropicMessagesProvider', () => {
       expect(callArgs).not.toHaveProperty('temperature');
     });
 
+    it('should suppress top_k when thinking is enabled', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          top_k: 40,
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+          max_tokens: 8000,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      // top_k should be suppressed when thinking is enabled
+      expect(callArgs).not.toHaveProperty('top_k');
+      expect(callArgs).toHaveProperty('thinking');
+    });
+
     it('should include cache_control in API call when configured', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022', {
         config: {
