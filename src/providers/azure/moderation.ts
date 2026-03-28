@@ -106,6 +106,8 @@ export function getModerationCacheKey(
   content: string,
 ): string {
   const cacheConfig = {
+    endpoint: config.endpoint,
+    apiVersion: config.apiVersion,
     blocklistNames: config.blocklistNames || [],
     haltOnBlocklistHit: config.haltOnBlocklistHit ?? false,
     passthrough: config.passthrough || {},

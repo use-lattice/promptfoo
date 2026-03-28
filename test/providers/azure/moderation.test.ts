@@ -202,6 +202,30 @@ describe('Azure Moderation', () => {
       );
     });
 
+    it('should include endpoint and apiVersion in the cache key', () => {
+      const firstKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://resource-a.cognitiveservices.azure.com/' },
+        'content',
+      );
+      const secondKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://resource-b.cognitiveservices.azure.com/' },
+        'content',
+      );
+
+      expect(firstKey).not.toBe(secondKey);
+
+      const versionKey1 = getModerationCacheKey('model', { apiVersion: '2024-09-01' }, 'content');
+      const versionKey2 = getModerationCacheKey(
+        'model',
+        { apiVersion: '2024-09-15-preview' },
+        'content',
+      );
+
+      expect(versionKey1).not.toBe(versionKey2);
+    });
+
     it('should ignore auth-only config in the cache key', () => {
       const firstConfig = {
         apiKey: 'key',
@@ -210,7 +234,7 @@ describe('Azure Moderation', () => {
       };
       const secondConfig = {
         apiKey: 'different-key',
-        endpoint: 'https://different.com',
+        endpoint: 'https://test.com',
         headers: { 'X-Test': 'different-value' },
       };
 
