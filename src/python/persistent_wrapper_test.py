@@ -250,7 +250,9 @@ class TestInitTracing(unittest.TestCase):
         opentelemetry_module.exporter = opentelemetry_exporter_module
         opentelemetry_module.sdk = sdk_module
         opentelemetry_exporter_module.otlp = opentelemetry_exporter_otlp_module
-        opentelemetry_exporter_otlp_module.proto = opentelemetry_exporter_otlp_proto_module
+        opentelemetry_exporter_otlp_module.proto = (
+            opentelemetry_exporter_otlp_proto_module
+        )
         opentelemetry_exporter_otlp_proto_module.http = (
             opentelemetry_exporter_otlp_proto_http_module
         )
