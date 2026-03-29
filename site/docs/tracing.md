@@ -348,7 +348,7 @@ def call_api(prompt, options, context):
     return {"output": your_llm_call(prompt)}
 ```
 
-If you only need provider-level timing, you do not need any custom Python tracing code at all; Promptfoo's Python wrapper already emits a provider span when tracing is enabled. Add child spans only when you want internal workflow visibility such as tools, searches, or multi-step agent trajectories.
+If you only need provider-level timing for a Python provider, enable the wrapper OTEL path by installing the Python OpenTelemetry packages and setting `PROMPTFOO_ENABLE_OTEL=true`. Add custom child spans only when you want internal workflow visibility such as tools, searches, or multi-step agent trajectories.
 
 ## Trace Visualization
 

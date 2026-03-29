@@ -25,6 +25,7 @@ pip install -r requirements.txt
 export OPENAI_API_KEY=your_api_key_here
 
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+PROMPTFOO_ENABLE_OTEL=true npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest view
 ```
 
@@ -33,7 +34,7 @@ npx promptfoo@latest view
 - multi-turn execution over a persistent `SQLiteSession`
 - specialist handoffs between a triage agent, an FAQ agent, and a seat-booking agent
 - Promptfoo trace ingestion of the SDK's internal spans
-- assertions on tool usage, tool arguments, tool order, and overall task success
+- assertions on tool usage, tool arguments, agent spans, tool order, and overall task success
 
 ## How The Tracing Works
 
@@ -46,7 +47,9 @@ At a high level:
 3. The processor converts OpenAI Agents spans into OTLP JSON.
 4. Promptfoo ingests those spans and makes them available in the Trace Timeline and `trajectory:*` assertions.
 
-If you skip this exporter, Promptfoo will still create a provider-level Python span automatically, but it will not see the SDK's tool and handoff spans.
+If you skip this exporter, Promptfoo will not see the SDK's tool and handoff spans, so `trajectory:*` assertions will not have the trace data they need.
+
+If you also enable Promptfoo's Python wrapper OTEL path with `PROMPTFOO_ENABLE_OTEL=true`, the example will emit a provider-level Python span as well. The custom SDK spans will inherit that active OTEL span as their parent. The example config accepts both OTLP JSON and protobuf because the SDK bridge emits JSON while the wrapper exporter uses protobuf by default.
 
 ## Assertion Pattern
 
@@ -83,6 +86,12 @@ assert:
         - update_seat
         - faq_lookup
 
+  - type: trajectory:step-count
+    value:
+      type: span
+      pattern: 'agent *'
+      min: 3
+
   - type: trace-error-spans
     value:
       max_count: 0
@@ -105,7 +114,7 @@ That pattern is useful when you want to evaluate:
 
 After the eval finishes, open the web UI and inspect the **Trace Timeline** for any row. You should see:
 
-- Promptfoo's provider span
+- a provider-level Python span when `PROMPTFOO_ENABLE_OTEL=true`
 - agent spans
 - handoff spans
 - generation spans
