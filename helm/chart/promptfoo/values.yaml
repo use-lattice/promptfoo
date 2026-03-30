@@ -42,6 +42,8 @@ service:
   port: 3000
 
 domainName: 'promptfoo.example.com'
+ingress:
+  enabled: false
 
 resources:
   limits:
