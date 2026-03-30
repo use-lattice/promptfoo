@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
-import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from '../base';
+import { RedteamGraderBase, RedteamPluginBase } from '../base';
 import { POLICY_METRIC_PREFIX } from './constants';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './utils';
 
@@ -14,6 +14,7 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
