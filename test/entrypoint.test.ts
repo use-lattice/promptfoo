@@ -6,10 +6,19 @@ type NodeEngineComparator = {
   operator: '' | NodeEngineComparatorOperator;
   version: string;
 };
+type ParseNodeEngineVersionOptions = {
+  allowPrerelease?: boolean;
+};
 
-function parseNodeEngineVersion(version: string): NodeEngineVersionTuple | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version);
+function parseNodeEngineVersion(
+  version: string,
+  options: ParseNodeEngineVersionOptions = {},
+): NodeEngineVersionTuple | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$/.exec(version);
   if (!match) {
+    return null;
+  }
+  if (!options.allowPrerelease && match[4]) {
     return null;
   }
 
@@ -40,7 +49,7 @@ function satisfiesNodeEngineComparator(
   currentVersion: NodeEngineVersionTuple,
   comparator: NodeEngineComparator,
 ): boolean {
-  const comparatorVersion = parseNodeEngineVersion(comparator.version);
+  const comparatorVersion = parseNodeEngineVersion(comparator.version, { allowPrerelease: true });
   if (!comparatorVersion) {
     return false;
   }
@@ -117,8 +126,12 @@ describe('entrypoint version check logic', () => {
     it('parses full semver versions with optional prefixes and suffixes', () => {
       expect(parseNodeEngineVersion('v20.9.0')).toEqual([20, 9, 0]);
       expect(parseNodeEngineVersion('20.20.0')).toEqual([20, 20, 0]);
-      expect(parseNodeEngineVersion('21.0.0-0')).toEqual([21, 0, 0]);
       expect(parseNodeEngineVersion('22.22.0+build.1')).toEqual([22, 22, 0]);
+    });
+
+    it('allows prerelease comparator versions but rejects prerelease runtime versions', () => {
+      expect(parseNodeEngineVersion('21.0.0-0', { allowPrerelease: true })).toEqual([21, 0, 0]);
+      expect(parseNodeEngineVersion('v20.20.0-rc.1')).toBeNull();
     });
 
     it('returns null for malformed versions', () => {
@@ -161,6 +174,10 @@ describe('entrypoint version check logic', () => {
 
     it('returns null when the current Node.js version cannot be parsed', () => {
       expect(isSupportedNodeEngineVersion('node-20.9.0', nodeEngineComparatorSets)).toBeNull();
+    });
+
+    it('rejects prerelease runtime versions so unstable Node builds do not slip through', () => {
+      expect(isSupportedNodeEngineVersion('v20.20.0-rc.1', nodeEngineComparatorSets)).toBeNull();
     });
   });
 

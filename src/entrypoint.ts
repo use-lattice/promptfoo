@@ -16,6 +16,9 @@ type NodeEngineComparator = {
   operator: '' | NodeEngineComparatorOperator;
   version: string;
 };
+type ParseNodeEngineVersionOptions = {
+  allowPrerelease?: boolean;
+};
 
 // Build-time constants injected by tsdown from package.json engines field
 declare const __PROMPTFOO_NODE_ENGINE_RANGE__: string | undefined;
@@ -35,9 +38,15 @@ const nodeEngineComparatorSets =
     ? fallbackNodeEngineComparatorSets
     : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
 
-function parseNodeEngineVersion(version: string): NodeEngineVersionTuple | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version);
+function parseNodeEngineVersion(
+  version: string,
+  options: ParseNodeEngineVersionOptions = {},
+): NodeEngineVersionTuple | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$/.exec(version);
   if (!match) {
+    return null;
+  }
+  if (!options.allowPrerelease && match[4]) {
     return null;
   }
 
@@ -68,7 +77,7 @@ function satisfiesNodeEngineComparator(
   currentVersion: NodeEngineVersionTuple,
   comparator: NodeEngineComparator,
 ): boolean {
-  const comparatorVersion = parseNodeEngineVersion(comparator.version);
+  const comparatorVersion = parseNodeEngineVersion(comparator.version, { allowPrerelease: true });
   if (!comparatorVersion) {
     return false;
   }
