@@ -58,7 +58,7 @@ const providerWithOptions = await loadApiProvider('azure:chat:test', {
 An `Assertion` can take an `AssertionFunction` as its `value`. The function receives:
 
 - `output`: the LLM output string
-- `context`: execution context, including `prompt`, `vars`, `test`, `config`, `provider`, and `providerResponse`
+- `context`: execution context, including `prompt`, `vars`, `test`, `logProbs`, `config`, `provider`, `providerResponse`, and optional `trace` data for debugging
 
 <details>
 <summary>Type definition</summary>
@@ -71,9 +71,11 @@ context: {
 prompt?: string;
 vars: Record<string, unknown>;
 test: AtomicTestCase;
+logProbs: number[] | undefined;
 config?: Record<string, any>;
 provider?: unknown;
 providerResponse?: unknown;
+trace?: unknown;
 },
 ) => AssertionFunctionResult | Promise<AssertionFunctionResult>;
 

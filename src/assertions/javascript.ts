@@ -118,13 +118,28 @@ const validateResult = async (result: unknown): Promise<boolean | number | Gradi
 function serializeFunctionAssertion(assertion: AssertionParams['assertion']) {
   invariant(
     typeof assertion.value === 'function',
-    'javascript assertion must have a function value',
+    `function-valued javascript assertion (type: ${assertion.type}) must have a function value`,
   );
   const functionString = assertion.value.toString();
   return {
     ...assertion,
     value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
   };
+}
+
+function normalizeResultAssertion(
+  assertion: GradingResult['assertion'],
+  fallbackAssertion: AssertionParams['assertion'],
+) {
+  if (!assertion) {
+    return serializeFunctionAssertion(fallbackAssertion);
+  }
+
+  if (typeof assertion.value === 'function') {
+    return serializeFunctionAssertion(assertion);
+  }
+
+  return assertion;
 }
 
 function normalizeFunctionAssertionResult(
@@ -165,7 +180,7 @@ function normalizeFunctionAssertionResult(
         : pass
           ? 'Assertion passed'
           : `Custom function returned ${result.pass ? 'true' : 'false'}`,
-    assertion: result.assertion ?? serializedAssertion,
+    assertion: normalizeResultAssertion(result.assertion, assertion),
   };
 }
 

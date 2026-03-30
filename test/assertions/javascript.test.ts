@@ -758,13 +758,13 @@ describe('JavaScript file references', () => {
     });
   });
 
-  it.each([
+  const inverseFunctionAssertionCases: [string, Assertion, boolean, number, string][] = [
     [
       'boolean results for not-javascript assertions',
       {
         type: 'not-javascript',
         value: () => true,
-      } as Assertion,
+      },
       false,
       0,
       'Custom function returned true',
@@ -775,7 +775,7 @@ describe('JavaScript file references', () => {
         type: 'not-javascript',
         value: () => 0.25,
         threshold: 0.5,
-      } as Assertion,
+      },
       true,
       0.25,
       'Assertion passed',
@@ -789,12 +789,16 @@ describe('JavaScript file references', () => {
           score: 0.75,
           reason: 'Custom reason',
         }),
-      } as Assertion,
+      },
       false,
       0.75,
       'Custom function returned true',
     ],
-  ])('should honor inverse mode for direct function-valued javascript assertions with %s', async (_type, assertion, expectedPass, expectedScore, expectedReason) => {
+  ];
+
+  it.each(
+    inverseFunctionAssertionCases,
+  )('should honor inverse mode for direct function-valued javascript assertions with %s', async (_type, assertion, expectedPass, expectedScore, expectedReason) => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion({
