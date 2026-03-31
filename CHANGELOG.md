@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.4](https://github.com/promptfoo/promptfoo/compare/0.121.3...0.121.4) (2026-03-31)
+
+
+### Features
+
+* japan fiea plugin ([#8316](https://github.com/promptfoo/promptfoo/issues/8316)) ([f330ab3](https://github.com/promptfoo/promptfoo/commit/f330ab391b44e8b29acd1cb9dd7b415ebe6c202a))
+* **matchers:** expose grading provider metadata in GradingResult ([#8330](https://github.com/promptfoo/promptfoo/issues/8330)) ([03cbac6](https://github.com/promptfoo/promptfoo/commit/03cbac6f5e4141372a399a07ab907c20a182993f))
+* **openai:** enable chatgpt login via codex ([#8327](https://github.com/promptfoo/promptfoo/issues/8327)) ([5a9cb96](https://github.com/promptfoo/promptfoo/commit/5a9cb9689b2b2b84d751fabeae19460cee9f6aad))
+
+
+### Bug Fixes
+
+* **app:** clarify attack success rate label ([#8386](https://github.com/promptfoo/promptfoo/issues/8386)) ([d088eac](https://github.com/promptfoo/promptfoo/commit/d088eacd5d2aec073bfd8cc99e607ad39d88a8dc))
+* **bedrock:** preserve zero-valued inference config ([#8272](https://github.com/promptfoo/promptfoo/issues/8272)) ([1cd397e](https://github.com/promptfoo/promptfoo/commit/1cd397e636a2bc9972ca01353facd080da51f868))
+* **deps:** update dependency @modelcontextprotocol/sdk to ^1.28.0 ([416f3cd](https://github.com/promptfoo/promptfoo/commit/416f3cd94b0275a4e0b715d081dfb4c46eb74c33))
+* **deps:** update dependency @modelcontextprotocol/sdk to ^1.28.0 ([5a8a732](https://github.com/promptfoo/promptfoo/commit/5a8a73254835426e29c0cf4d5345f1d8666d05ca))
+* **deps:** update dependency @openai/agents to ^0.8.1 ([#8371](https://github.com/promptfoo/promptfoo/issues/8371)) ([3f2234c](https://github.com/promptfoo/promptfoo/commit/3f2234cd8a1af3ea9e0b5a7832811f902c021613))
+* **deps:** update dependency @openai/agents to ^0.8.1 ([#8372](https://github.com/promptfoo/promptfoo/issues/8372)) ([aecdb11](https://github.com/promptfoo/promptfoo/commit/aecdb11ae6899566cab3aea0cf066e4a37ad8efd))
+* **deps:** update dependency @opentelemetry/exporter-trace-otlp-http to ^0.214.0 ([#8379](https://github.com/promptfoo/promptfoo/issues/8379)) ([462f1e5](https://github.com/promptfoo/promptfoo/commit/462f1e57f1b35163f775d755aeb43036b8360b0d))
+* **deps:** update dependency openai to ^6.33.0 ([#8388](https://github.com/promptfoo/promptfoo/issues/8388)) ([19e04ce](https://github.com/promptfoo/promptfoo/commit/19e04cef787f9c48e1f4496f8814927868aac951))
+* **deps:** update example dependencies ([#8367](https://github.com/promptfoo/promptfoo/issues/8367)) ([977a656](https://github.com/promptfoo/promptfoo/commit/977a65673b31150da396d21cc8389282290af822))
+* **deps:** update openai packages ([#8368](https://github.com/promptfoo/promptfoo/issues/8368)) ([e5b842a](https://github.com/promptfoo/promptfoo/commit/e5b842afb768200e13e27ab2f746185886fdb4ed))
+* G-Eval wrong scoring for negative criteria ([#8259](https://github.com/promptfoo/promptfoo/issues/8259)) ([e7bba6e](https://github.com/promptfoo/promptfoo/commit/e7bba6e6475e26c85bac7465ddb9ce8c8510bef3))
+* handle generated redteam exports during eval ([#8301](https://github.com/promptfoo/promptfoo/issues/8301)) ([ef3f67f](https://github.com/promptfoo/promptfoo/commit/ef3f67fda1bc782c56267211b1c94de835c4c25a))
+* image should preserve aspect ratio in results table ([#8279](https://github.com/promptfoo/promptfoo/issues/8279)) ([e96d630](https://github.com/promptfoo/promptfoo/commit/e96d63012d1aec3bba8599383f824f953c3db920))
+* **openai:** preserve agents zero token usage ([#8283](https://github.com/promptfoo/promptfoo/issues/8283)) ([6354f4e](https://github.com/promptfoo/promptfoo/commit/6354f4ede7731b3cfd701923bfefd345fc5e2f91))
+* **openai:** preserve assistant temperature zero ([#8271](https://github.com/promptfoo/promptfoo/issues/8271)) ([311c0a4](https://github.com/promptfoo/promptfoo/commit/311c0a495cd74c45746d61eef9d570de81ed7d1b))
+* parse rate-limit reset headers ([#8341](https://github.com/promptfoo/promptfoo/issues/8341)) ([985ab28](https://github.com/promptfoo/promptfoo/commit/985ab289f819f75eb0cfe20834aff8b6bd1629d0))
+* preserve configured plugin config in strategy preview ([#8326](https://github.com/promptfoo/promptfoo/issues/8326)) ([e20458e](https://github.com/promptfoo/promptfoo/commit/e20458e40dda88e240aa23f440ed548f487fb091))
+* prevent SSTI in conversation-relevance assertion ([#8258](https://github.com/promptfoo/promptfoo/issues/8258)) ([49cbe41](https://github.com/promptfoo/promptfoo/commit/49cbe4178f87b70ea2429a620f14f6598b074c99))
+* **providers:** use apiKeyEnvar in error messages across OpenAI providers ([#8180](https://github.com/promptfoo/promptfoo/issues/8180)) ([7008087](https://github.com/promptfoo/promptfoo/commit/70080873e2ffefbed7801ceea76964ec03d12474))
+* **providers:** use rendered prompt in simulated user ([#8363](https://github.com/promptfoo/promptfoo/issues/8363)) ([1f1fa86](https://github.com/promptfoo/promptfoo/commit/1f1fa86bb7a297b9e4492c64d4f8d9d1423f6a74))
+* **redteam:** clarify remote generation guidance ([#8252](https://github.com/promptfoo/promptfoo/issues/8252)) ([45870ab](https://github.com/promptfoo/promptfoo/commit/45870ab7541d81d3e5d1ec88cb2514076eed0999))
+* **redteam:** guard missing cross-session leak metadata ([#8238](https://github.com/promptfoo/promptfoo/issues/8238)) ([9924bae](https://github.com/promptfoo/promptfoo/commit/9924bae124947d158151d991370017fba58768fe))
+* **redteam:** normalize code editor imports ([#8306](https://github.com/promptfoo/promptfoo/issues/8306)) ([057f9e0](https://github.com/promptfoo/promptfoo/commit/057f9e02fd4bb1b5914212b4d5fb6b46877b4a90))
+* **redteam:** pass full conversation history to crescendo grader ([#8239](https://github.com/promptfoo/promptfoo/issues/8239)) ([01619a8](https://github.com/promptfoo/promptfoo/commit/01619a8b186334c2140b262df75a4fd22d042dcf))
+* **redteam:** preserve goat zero max turns ([#8294](https://github.com/promptfoo/promptfoo/issues/8294)) ([3077acf](https://github.com/promptfoo/promptfoo/commit/3077acfb9521bacf9b7966fb423c320ba5733533))
+* **redteam:** preserve voice crescendo zero max turns ([#8310](https://github.com/promptfoo/promptfoo/issues/8310)) ([5d38b28](https://github.com/promptfoo/promptfoo/commit/5d38b28d3bb5ac88d109b0e38547801dd67fa221))
+* **redteam:** preserve zero prompt injection sample ([#8291](https://github.com/promptfoo/promptfoo/issues/8291)) ([16b3221](https://github.com/promptfoo/promptfoo/commit/16b32218a1e8dd9d7b3ec1c3d51605bb8c8849f5))
+* **redteam:** preserve zero-valued crescendo config ([#8273](https://github.com/promptfoo/promptfoo/issues/8273)) ([9ec66b5](https://github.com/promptfoo/promptfoo/commit/9ec66b5370d6aa6562cdea942ddbc587af8c14e6))
+* **redteam:** preserve zero-valued custom config ([#8274](https://github.com/promptfoo/promptfoo/issues/8274)) ([a76058f](https://github.com/promptfoo/promptfoo/commit/a76058f68959d0c372317f6be7c4794784e231d6))
+* **redteam:** preserve zero-valued voice crescendo config ([#8270](https://github.com/promptfoo/promptfoo/issues/8270)) ([7d36044](https://github.com/promptfoo/promptfoo/commit/7d360449de27ad8ece7eb930018ec3455e490182))
+* **redteam:** skip unblocking feature checks when disabled ([#8266](https://github.com/promptfoo/promptfoo/issues/8266)) ([c6bdf39](https://github.com/promptfoo/promptfoo/commit/c6bdf39f11ffe2012bb5003c0d8a9f4c2ab6293f))
+* **redteam:** support policy multi-input generation ([#8320](https://github.com/promptfoo/promptfoo/issues/8320)) ([be14251](https://github.com/promptfoo/promptfoo/commit/be142518174fad79beb7b2335b47268cdf12f47c))
+* replace undeclared tiny-invariant imports in app ([#8309](https://github.com/promptfoo/promptfoo/issues/8309)) ([f85704f](https://github.com/promptfoo/promptfoo/commit/f85704f428a948fb8936d6203e8f58dc0fe830c5))
+* respect review language in example test generation ([#8334](https://github.com/promptfoo/promptfoo/issues/8334)) ([3163583](https://github.com/promptfoo/promptfoo/commit/3163583ea60a450d622975e2bba663ba3429c72b))
+* **sagemaker:** preserve zero maxTokens ([#8286](https://github.com/promptfoo/promptfoo/issues/8286)) ([75603d3](https://github.com/promptfoo/promptfoo/commit/75603d3eb2cb197d9eeb1261119420b34fa8d066))
+* **util:** preserve shared references in safeJsonStringify ([#8342](https://github.com/promptfoo/promptfoo/issues/8342)) ([987e8ad](https://github.com/promptfoo/promptfoo/commit/987e8adc759ad2ee1523a67afe6e6e750ba536b4))
+* **watsonx:** preserve zero max_new_tokens ([#8288](https://github.com/promptfoo/promptfoo/issues/8288)) ([b489160](https://github.com/promptfoo/promptfoo/commit/b4891600b8910f39a55beb0a25dbdddf5cf78606))
+
 ## [0.121.3](https://github.com/promptfoo/promptfoo/compare/0.121.2...0.121.3) (2026-03-24)
 
 ### Features
