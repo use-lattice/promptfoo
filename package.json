@@ -18,8 +18,13 @@
   },
   "types": "dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "drizzle",
+    "!dist/**/*.map"
+  ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
